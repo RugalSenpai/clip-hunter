@@ -1,0 +1,22 @@
+# Runtime outputs & downloaded media
+runs/
+*.mp4
+*.ts
+*.wav
+*.vtt
+*.ass
+*.jpg
+*.png
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
