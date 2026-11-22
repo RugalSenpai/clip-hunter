@@ -7,6 +7,8 @@ runs/
 *.ass
 *.jpg
 *.png
+!clipper/assets/*.png
+*cookies*.txt
 
 # Python artifacts
 __pycache__/

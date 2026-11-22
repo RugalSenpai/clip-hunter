@@ -105,15 +105,24 @@ def measure_loudness(media_path: Path) -> tuple[float, float]:
 
 def _resolve_live_stream_url(page_url: str) -> str:
     """Resolve the direct HLS/stream URL via yt-dlp -g so ffmpeg can segment it."""
+    from .fetcher import get_ytdlp_cookie_args
+
+    cookie_args = get_ytdlp_cookie_args()
     proc = subprocess.run(
-        ["yt-dlp", "-g", "-f", "best[height<=1080]/best", page_url],
+        ["yt-dlp", *cookie_args, "-g", "-f", "best[height<=1080]/best", page_url],
         capture_output=True,
         text=True,
         timeout=60,
         check=False,
     )
     if proc.returncode != 0 or not proc.stdout.strip():
-        raise RuntimeError(f"Could not resolve live stream URL: {proc.stderr[-800:]}")
+        err = proc.stderr[-800:]
+        if "Sign in to confirm" in err and not cookie_args:
+            err += (
+                "\n[hint] YouTube requested sign-in cookies. Select a browser in "
+                "'YouTube Cookies' (or provide a cookies.txt path) in the left panel."
+            )
+        raise RuntimeError(f"Could not resolve live stream URL: {err}")
     return proc.stdout.strip().splitlines()[0]
 
 
@@ -155,6 +164,9 @@ def run_live_clipper(
     game_tag: str | None = None,
     stop_event: threading.Event | None = None,
     on_clip_ready: Callable[[ClipArtifact], None] | None = None,
+    compute_mode: str = "auto",
+    enable_hook: bool = True,
+    profile: str = "profile1",
 ) -> list[ClipArtifact]:
     """Mode B: Record rolling 1-min segments, run local Whisper, judge 5-min overlapping windows."""
     t0 = time.monotonic()
@@ -233,8 +245,7 @@ def run_live_clipper(
                 segs, words = transcribe_media(
                     seg_file,
                     model_size=whisper_model,
-                    device="cpu",
-                    compute_type="int8",
+                    device=compute_mode,
                     time_offset=seg_start,
                 )
                 records.append(
@@ -331,6 +342,9 @@ def run_live_clipper(
                             ratios=ratios,
                             enable_subtitles=enable_subtitles,
                             work_dir=work_dir,
+                            compute_mode=compute_mode,
+                            enable_hook=enable_hook,
+                            profile=profile,
                         )
                         art = ClipArtifact(
                             index=clip_idx,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -10,41 +12,143 @@ from .models import Candidate, TranscriptSegment, WordTimestamp
 _SENTENCE_END_CHARS = (".", "!", "?")
 
 _WHISPER_MODEL_CACHE: dict[tuple[str, str, str], Any] = {}
+_CUDA_AVAILABLE: bool | None = None
+_DLLS_REGISTERED = False
+
+
+def _register_nvidia_dlls() -> None:
+    """Ensure pip-installed nvidia/*/bin CUDA DLLs are discoverable on Windows."""
+    global _DLLS_REGISTERED
+    if _DLLS_REGISTERED or not sys.platform.startswith("win"):
+        _DLLS_REGISTERED = True
+        return
+    _DLLS_REGISTERED = True
+    try:
+        import nvidia  # type: ignore
+
+        for root in getattr(nvidia, "__path__", []):
+            for bin_dir in Path(root).glob("*/bin"):
+                if bin_dir.is_dir():
+                    os.add_dll_directory(str(bin_dir))
+                    os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+    except Exception:
+        pass
+
+
+def has_cuda() -> bool:
+    """Return True if ctranslate2 detects at least one CUDA GPU."""
+    global _CUDA_AVAILABLE
+    if _CUDA_AVAILABLE is None:
+        _register_nvidia_dlls()
+        try:
+            import ctranslate2
+
+            _CUDA_AVAILABLE = ctranslate2.get_cuda_device_count() > 0
+        except Exception:
+            _CUDA_AVAILABLE = False
+    return _CUDA_AVAILABLE
+
+
+def resolve_whisper_device(compute_mode: str = "auto") -> tuple[str, str]:
+    """Map compute_mode ('auto', 'cpu', 'gpu', 'hybrid') to (device, compute_type)."""
+    mode = (compute_mode or "auto").lower()
+    if mode == "cpu":
+        return "cpu", "int8"
+    if mode in ("auto", "gpu", "hybrid") and has_cuda():
+        return "cuda", "float16"
+    return "cpu", "int8"
 
 
 def get_whisper_model(
     model_size: str = "small.en",
-    device: str = "cpu",
-    compute_type: str = "int8",
+    device: str = "auto",
+    compute_type: str | None = None,
 ) -> Any:
-    """Lazy-load and cache a faster-whisper WhisperModel instance."""
-    key = (model_size, device, compute_type)
+    """Lazy-load and cache a faster-whisper WhisperModel instance with CPU fallback."""
+    _register_nvidia_dlls()
+    if device in ("auto", "gpu", "hybrid"):
+        resolved_device, resolved_compute = resolve_whisper_device(device)
+    else:
+        resolved_device = device
+        resolved_compute = compute_type or ("float16" if device == "cuda" else "int8")
+    if compute_type is not None and device not in ("auto", "gpu", "hybrid"):
+        resolved_compute = compute_type
+
+    key = (model_size, resolved_device, resolved_compute)
     if key not in _WHISPER_MODEL_CACHE:
         from faster_whisper import WhisperModel
 
-        _WHISPER_MODEL_CACHE[key] = WhisperModel(
-            model_size,
-            device=device,
-            compute_type=compute_type,
-        )
+        try:
+            _WHISPER_MODEL_CACHE[key] = WhisperModel(
+                model_size,
+                device=resolved_device,
+                compute_type=resolved_compute,
+            )
+        except Exception:
+            if resolved_device != "cpu":
+                fallback_key = (model_size, "cpu", "int8")
+                if fallback_key not in _WHISPER_MODEL_CACHE:
+                    _WHISPER_MODEL_CACHE[fallback_key] = WhisperModel(
+                        model_size,
+                        device="cpu",
+                        compute_type="int8",
+                    )
+                return _WHISPER_MODEL_CACHE[fallback_key]
+            raise
     return _WHISPER_MODEL_CACHE[key]
 
 
 def transcribe_media(
     media_path: str | Path,
     model_size: str = "small.en",
-    device: str = "cpu",
-    compute_type: str = "int8",
+    device: str = "auto",
+    compute_type: str | None = None,
     time_offset: float = 0.0,
+    vad_filter: bool = True,
+    on_progress=None,
 ) -> tuple[list[TranscriptSegment], list[WordTimestamp]]:
     """Run faster-whisper with word_timestamps=True on a short clip or audio chunk."""
+    global _CUDA_AVAILABLE
     model = get_whisper_model(model_size=model_size, device=device, compute_type=compute_type)
-    raw_segments, _info = model.transcribe(
-        str(media_path),
-        beam_size=1,
-        word_timestamps=True,
-        vad_filter=True,
-    )
+    def _collect_segments(it, total_dur: float):
+        from .fetcher import is_stop_requested
+
+        out = []
+        last_pct = 0
+        for seg in it:
+            if is_stop_requested():
+                raise RuntimeError("Cancelled by user")
+            out.append(seg)
+            if on_progress and total_dur > 0.5:
+                pct = max(0, min(90, int((float(seg.end) / total_dur) * 90)))
+                if pct > last_pct:
+                    last_pct = pct
+                    on_progress(pct)
+        return out
+
+    try:
+        raw_segments_iter, _info = model.transcribe(
+            str(media_path),
+            beam_size=1,
+            word_timestamps=True,
+            vad_filter=vad_filter,
+        )
+        raw_segments = _collect_segments(raw_segments_iter, float(getattr(_info, "duration", 0.0) or 0.0))
+    except RuntimeError as exc:
+        if "Cancelled by user" in str(exc):
+            raise
+        if device != "cpu" and ("cublas" in str(exc).lower() or "cuda" in str(exc).lower() or "cudnn" in str(exc).lower()):
+            _CUDA_AVAILABLE = False
+            model = get_whisper_model(model_size=model_size, device="cpu", compute_type="int8")
+            raw_segments_iter, _info = model.transcribe(
+                str(media_path),
+                beam_size=1,
+                word_timestamps=True,
+                vad_filter=vad_filter,
+            )
+            raw_segments = _collect_segments(raw_segments_iter, float(getattr(_info, "duration", 0.0) or 0.0))
+        else:
+            raise
 
     segments: list[TranscriptSegment] = []
     words: list[WordTimestamp] = []

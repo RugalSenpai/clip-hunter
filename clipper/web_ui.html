@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLIP HUNTER — AI Viral Clip Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      background-color: #090A0F;
+      color: #F3F4F6;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+    input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
+    input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none; height: 12px; width: 12px; border-radius: 50%;
+      background: #6366F1; margin-top: -4px; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+    }
+  </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col select-none bg-[#090A0F] text-zinc-100">
+
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- 1. TOP NAVIGATION BAR -->
+  <header class="h-[52px] shrink-0 bg-[#0D0F15] border-b border-white/[0.08] px-4 flex items-center justify-between gap-4 z-20">
+    <div class="flex items-center gap-3 min-w-0">
+      <img src="/api/logo" alt="Clip Hunter" class="w-7 h-7 rounded-lg border border-indigo-500/30 object-cover shrink-0" />
+      <div class="flex items-center gap-2.5">
+        <span class="font-semibold text-[13px] tracking-wider text-zinc-100">CLIP HUNTER</span>
+        <span class="h-3.5 w-[1px] bg-white/[0.1] hidden sm:inline-block"></span>
+        <span id="header-status-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800 text-zinc-300 border border-white/[0.08]">
+          <span class="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
+          Idle
+        </span>
+      </div>
+    </div>
+
+    <nav aria-label="Pipeline Progress" class="hidden lg:flex items-center gap-2 text-[12px]">
+      <div id="step-1" class="step-pill flex items-center gap-2 px-2.5 py-1 rounded-md text-zinc-300 bg-white/[0.04] border border-white/[0.08]">
+        <span class="step-num w-4 h-4 rounded-full bg-white/[0.08] text-zinc-300 flex items-center justify-center text-[10px] font-semibold">1</span>
+        <span class="font-medium">1. Transcript & Buffer</span>
+      </div>
+      <div class="w-5 h-[1px] bg-white/[0.12]"></div>
+      <div id="step-2" class="step-pill flex items-center gap-2 px-2.5 py-1 rounded-md text-zinc-300 bg-white/[0.04] border border-white/[0.08]">
+        <span class="step-num w-4 h-4 rounded-full bg-white/[0.08] text-zinc-300 flex items-center justify-center text-[10px] font-semibold">2</span>
+        <span class="font-medium">2. LLM Moment Judge</span>
+      </div>
+      <div class="w-5 h-[1px] bg-white/[0.12]"></div>
+      <div id="step-3" class="step-pill flex items-center gap-2 px-2.5 py-1 rounded-md text-zinc-300 bg-white/[0.04] border border-white/[0.08]">
+        <span class="step-num w-4 h-4 rounded-full bg-white/[0.08] text-zinc-300 flex items-center justify-center text-[10px] font-semibold">3</span>
+        <span class="font-medium">3. Download, Edit & Subtitles</span>
+      </div>
+    </nav>
+
+    <div class="flex items-center gap-2">
+      <div class="hidden xl:flex items-center gap-2 text-[11px] text-zinc-400 mr-2 tabular-nums">
+        <span>Blocks <strong id="stat-blocks" class="text-zinc-200 font-medium">0</strong></span>
+        <span class="text-zinc-600">•</span>
+        <span>Winners <strong id="stat-winners" class="text-zinc-200 font-medium">0</strong></span>
+        <span class="text-zinc-600">•</span>
+        <span>Ready <strong id="stat-ready" class="text-emerald-400 font-medium">0</strong></span>
+      </div>
+      <button onclick="switchSidebarTab('history')" class="h-8 px-3 rounded-lg text-[12px] font-medium text-zinc-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition-colors flex items-center gap-1.5">
+        History
+      </button>
+      <button onclick="openClipsFolder()" class="h-8 px-3 rounded-lg text-[12px] font-medium text-zinc-300 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition-colors flex items-center gap-1.5">
+        Open Folder
+      </button>
+      <button onclick="toggleSettingsModal()" title="LLM & Engine Settings" class="h-8 w-8 rounded-lg text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition-colors flex items-center justify-center">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <main class="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+
+    <!-- 2. LEFT SIDEBAR (New Run | History) -->
+    <aside class="w-full lg:w-[320px] shrink-0 bg-[#11131A] border-b lg:border-b-0 lg:border-r border-white/[0.08] flex flex-col lg:h-full">
+      <div class="p-3 border-b border-white/[0.08]">
+        <div class="grid grid-cols-2 p-1 rounded-lg bg-[#090A0F] border border-white/[0.06]">
+          <button id="tab-btn-new" onclick="switchSidebarTab('new')" class="py-1.5 px-3 rounded-md text-[12px] font-medium transition-all bg-[#181B24] text-white shadow-sm border border-white/[0.08]">
+            New Run
+          </button>
+          <button id="tab-btn-history" onclick="switchSidebarTab('history')" class="py-1.5 px-3 rounded-md text-[12px] font-medium transition-all text-zinc-400 hover:text-zinc-200 flex items-center justify-center gap-1.5">
+            <span>History</span>
+            <span id="history-count-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-white/[0.08] text-zinc-300 tabular-nums">0</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 1: NEW RUN -->
+      <div id="sidebar-panel-new" class="flex-1 flex flex-col overflow-y-auto">
+        <div class="p-4 space-y-5 flex-1">
+          <section class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Stream / VOD Source</h2>
+              <span id="mode-ready-badge" class="text-[10px] text-indigo-400 font-medium">VOD Ready</span>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-medium text-zinc-400">Pipeline Mode</label>
+              <select id="pipeline-mode" onchange="onModeChange()" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 focus:outline-none focus:border-indigo-500/60">
+                <option value="vod">Mode A — VOD Stream (10m blocks)</option>
+                <option value="live">Mode B — Live Stream (15m Buffer)</option>
+              </select>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-medium text-zinc-400">Video / Stream URL</label>
+              <input id="stream-url" type="text" placeholder="https://youtube.com/watch?v=... or Twitch URL" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/60" />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-medium text-zinc-400">Output Run Folder</label>
+              <input id="output-folder" type="text" value="" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] font-mono text-zinc-300 focus:outline-none focus:border-indigo-500/60" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <div class="space-y-1.5">
+                <label class="block text-[11px] font-medium text-zinc-400">YouTube Cookies</label>
+                <select id="cookies-browser" class="w-full h-8 px-2.5 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 focus:outline-none focus:border-indigo-500/60">
+                  <option value="">None</option>
+                  <option value="firefox">Firefox</option>
+                  <option value="chrome">Chrome</option>
+                  <option value="edge">Edge</option>
+                  <option value="brave">Brave</option>
+                </select>
+              </div>
+              <div class="space-y-1.5">
+                <label class="block text-[11px] font-medium text-zinc-400">cookies.txt (optional)</label>
+                <input id="cookies-file" type="text" placeholder="path/to/cookies.txt" class="w-full h-8 px-2.5 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[11px] font-mono text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/60" />
+              </div>
+            </div>
+
+            <div id="live-only-opts" class="hidden grid grid-cols-2 gap-2.5">
+              <div class="space-y-1.5">
+                <label class="block text-[11px] font-medium text-zinc-400">Buffer (min)</label>
+                <input id="buffer-min" type="number" value="15" min="5" max="60" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 tabular-nums" />
+              </div>
+              <div class="space-y-1.5">
+                <label class="block text-[11px] font-medium text-zinc-400">Twitch Chat</label>
+                <input id="twitch-channel" type="text" placeholder="optional" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 placeholder-zinc-600" />
+              </div>
+            </div>
+          </section>
+
+          <div class="h-[1px] bg-white/[0.06]"></div>
+
+          <section class="space-y-3.5">
+            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Engine & Export</h2>
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-medium text-zinc-400">Export Profile</label>
+              <select id="export-profile" onchange="onProfileChange()" class="w-full h-8 px-2.5 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 focus:outline-none focus:border-indigo-500/60">
+                <option value="profile1">Profile 1 — Multi-Ratio (9:16, 1:1, 16:9)</option>
+                <option value="profile2">Profile 2 — 9:16 Split (Facecam + Center Gameplay)</option>
+              </select>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-medium text-zinc-400">Export Aspect Ratios</label>
+              <div class="grid grid-cols-3 gap-2">
+                <button type="button" id="exp-916" onclick="toggleExportRatio(this, '9:16')" data-active="true" class="export-ratio-pill h-8 rounded-lg text-[12px] font-medium tabular-nums bg-indigo-500/15 text-indigo-300 border border-indigo-500/40 flex items-center justify-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span> 9:16
+                </button>
+                <button type="button" id="exp-11" onclick="toggleExportRatio(this, '1:1')" data-active="true" class="export-ratio-pill h-8 rounded-lg text-[12px] font-medium tabular-nums bg-indigo-500/15 text-indigo-300 border border-indigo-500/40 flex items-center justify-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span> 1:1
+                </button>
+                <button type="button" id="exp-169" onclick="toggleExportRatio(this, '16:9')" data-active="true" class="export-ratio-pill h-8 rounded-lg text-[12px] font-medium tabular-nums bg-indigo-500/15 text-indigo-300 border border-indigo-500/40 flex items-center justify-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span> 16:9
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-2.5 pt-0.5">
+              <div class="flex items-center justify-between">
+                <span class="text-[12px] text-zinc-300">Burned-in Subtitles (Word-by-Word)</span>
+                <button id="sw-subtitles" type="button" role="switch" aria-checked="true" onclick="toggleSwitch(this)" class="w-9 h-5 rounded-full bg-indigo-500 p-0.5 transition-colors flex items-center justify-end">
+                  <span class="w-4 h-4 rounded-full bg-white shadow-sm"></span>
+                </button>
+              </div>
+
+              <div class="flex items-center justify-between">
+                <span class="text-[12px] text-zinc-300">Top Hook Title Banner</span>
+                <button id="sw-hook" type="button" role="switch" aria-checked="true" onclick="toggleSwitch(this)" class="w-9 h-5 rounded-full bg-indigo-500 p-0.5 transition-colors flex items-center justify-end">
+                  <span class="w-4 h-4 rounded-full bg-white shadow-sm"></span>
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5 pt-1">
+              <div class="space-y-1">
+                <label class="block text-[11px] font-medium text-zinc-400">Min Score</label>
+                <input id="min-score" type="number" step="0.5" value="7.0" min="5" max="9.5" class="w-full h-8 px-2.5 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 tabular-nums" />
+              </div>
+              <div class="space-y-1">
+                <label class="block text-[11px] font-medium text-zinc-400">Max Clips</label>
+                <input id="max-clips" type="number" value="10" min="1" max="50" class="w-full h-8 px-2.5 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 tabular-nums" />
+              </div>
+              <div class="space-y-1">
+                <label class="block text-[11px] font-medium text-zinc-400">Block (min)</label>
+                <input id="block-min" type="number" value="10" min="2" max="20" class="w-full h-8 px-2.5 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 tabular-nums" />
+              </div>
+              <div class="space-y-1">
+                <label class="block text-[11px] font-medium text-zinc-400">Whisper Model</label>
+                <select id="whisper-model" class="w-full h-8 px-2 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200">
+                  <option value="small.en">small.en</option>
+                  <option value="base.en">base.en</option>
+                  <option value="tiny.en">tiny.en</option>
+                  <option value="medium.en">medium.en</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <label class="block text-[11px] font-medium text-zinc-400">Compute Acceleration</label>
+              <select id="compute-mode" class="w-full h-8 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200">
+                <option value="auto">Auto (GPU + CPU fallback)</option>
+                <option value="gpu">GPU (NVENC + CUDA)</option>
+                <option value="cpu">CPU (libx264 + int8)</option>
+                <option value="hybrid">Hybrid (GPU + CPU parallel)</option>
+              </select>
+            </div>
+          </section>
+        </div>
+
+        <div class="p-3 bg-[#11131A]/95 border-t border-white/[0.08] flex items-center gap-2 shrink-0">
+          <button id="resume-clipping-btn" onclick="resumeCurrentRun()" class="hidden flex-1 h-9 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[12px] font-medium flex items-center justify-center gap-1.5 transition-all">
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            <span>Resume</span>
+          </button>
+          <button id="start-clipping-btn" onclick="triggerClippingRun(state.status === 'stopped')" class="flex-1 h-9 px-4 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-[12px] font-medium flex items-center justify-center gap-2 transition-all">
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            <span>Start Clipping</span>
+          </button>
+          <button id="stop-clipping-btn" onclick="stopClippingRun()" title="Stop & preserve finished clips" class="hidden h-9 w-9 shrink-0 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 flex items-center justify-center transition-colors">
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 2: HISTORY -->
+      <div id="sidebar-panel-history" class="hidden flex-1 flex flex-col overflow-y-auto p-3.5 space-y-3">
+        <div class="flex items-center gap-2">
+          <input id="history-search" oninput="filterHistory(this.value)" type="text" placeholder="Search runs..." class="flex-1 h-8 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-indigo-500/60" />
+          <button onclick="newRunFolder()" class="h-8 px-2.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-[12px] font-medium shrink-0">+ New</button>
+          <button onclick="clearAllHistory()" title="Clear All History" class="h-8 px-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[11px] font-medium shrink-0">Clear</button>
+        </div>
+        <div id="history-list" class="space-y-2.5"></div>
+      </div>
+    </aside>
+
+    <!-- 3. CENTER PANEL: Generated Clips & Log -->
+    <section class="w-full lg:w-[340px] shrink-0 bg-[#0D0F15] border-b lg:border-b-0 lg:border-r border-white/[0.08] flex flex-col lg:h-full">
+      <div class="px-4 pt-3 pb-2.5 border-b border-white/[0.08] flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1 bg-[#090A0F] p-1 rounded-lg border border-white/[0.06]">
+          <button id="center-tab-clips" onclick="switchCenterTab('clips')" class="px-2.5 py-1 rounded-md text-[12px] font-medium bg-[#181B24] text-white border border-white/[0.08] flex items-center gap-1.5">
+            <span>Clips</span>
+            <span id="clips-count-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-500/20 text-indigo-300 tabular-nums">0</span>
+          </button>
+          <button id="center-tab-log" onclick="switchCenterTab('log')" class="px-2.5 py-1 rounded-md text-[12px] font-medium text-zinc-400 hover:text-zinc-200">
+            Pipeline Log
+          </button>
+        </div>
+        <button id="sort-clips-btn" onclick="toggleSortClips()" class="h-7 px-2.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.07] text-[11px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1.5">
+          <span>⇅</span> <span id="sort-label">Rank</span>
+        </button>
+      </div>
+
+      <div id="clips-list-container" class="flex-1 overflow-y-auto p-3 space-y-2"></div>
+      <div id="pipeline-log-container" class="hidden flex-1 overflow-y-auto p-3.5 font-mono text-[11px] leading-relaxed bg-[#090A0F] text-zinc-300 whitespace-pre-wrap"></div>
+    </section>
+
+    <!-- 4. RIGHT PANEL: Video Preview & Metadata Studio -->
+    <section class="flex-1 bg-[#090A0F] flex flex-col lg:h-full overflow-y-auto">
+      <div class="h-12 shrink-0 px-5 border-b border-white/[0.08] bg-[#0D0F15]/60 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span class="text-[11px] font-medium text-zinc-400">Preview Ratio</span>
+          <div class="inline-flex p-0.5 rounded-lg bg-[#11131A] border border-white/[0.08]">
+            <button onclick="setPreviewRatio('9:16')" id="ratio-btn-9-16" class="ratio-switcher-btn px-2.5 py-1 rounded-md text-[11px] font-medium tabular-nums bg-indigo-500 text-white">9:16</button>
+            <button onclick="setPreviewRatio('1:1')" id="ratio-btn-1-1" class="ratio-switcher-btn px-2.5 py-1 rounded-md text-[11px] font-medium tabular-nums text-zinc-400 hover:text-zinc-200">1:1</button>
+            <button onclick="setPreviewRatio('16:9')" id="ratio-btn-16-9" class="ratio-switcher-btn px-2.5 py-1 rounded-md text-[11px] font-medium tabular-nums text-zinc-400 hover:text-zinc-200">16:9</button>
+          </div>
+          <div class="inline-flex p-0.5 rounded-lg bg-[#11131A] border border-white/[0.08] ml-2">
+            <button onclick="setStageMode('preview')" id="stage-mode-preview" class="px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#181B24] text-white">Preview</button>
+            <button onclick="setStageMode('edit')" id="stage-mode-edit" class="px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-200">✎ Edit Clip</button>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="preview-clip-badge" class="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono text-zinc-400 bg-white/[0.04] border border-white/[0.06]">no clip selected</span>
+          <button onclick="openExternalPlayer()" class="h-7 px-3 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-[11px] font-medium text-zinc-300 hover:text-white">External Player</button>
+        </div>
+      </div>
+
+      <div class="flex-1 flex flex-col xl:flex-row overflow-y-auto">
+        <!-- VIDEO STAGE + EDITOR -->
+        <div class="flex-1 flex flex-col justify-between p-4 border-b xl:border-b-0 xl:border-r border-white/[0.08] min-h-[420px]">
+          <div class="flex-1 flex items-center justify-center py-2">
+            <div id="video-stage-frame" class="relative w-[300px] h-[533px] rounded-2xl overflow-hidden bg-[#05070B] border border-white/[0.12] shadow-2xl flex items-center justify-center select-none">
+              <video id="clip-video-player" class="w-full h-full object-contain" preload="auto" playsinline></video>
+
+              <!-- Profile 2 / Full-Game Live 9:16 Preview (30% facecam overlaid at top of 100% gameplay) -->
+              <div id="p2-split-preview" class="hidden absolute inset-0">
+                <div id="p2-game-pan-area" title="Drag left/right to center gameplay" class="absolute inset-0 w-full h-full overflow-hidden bg-black cursor-ew-resize">
+                  <video id="p2-game-video" class="w-full h-full object-cover pointer-events-none" muted playsinline></video>
+                  <span class="pointer-events-none absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/65 text-[9px] text-zinc-300 font-mono">⇄ DRAG GAME</span>
+                </div>
+                <div id="p2-cam-panel" class="absolute top-0 left-0 right-0 h-[30%] z-10 overflow-hidden bg-black pointer-events-none">
+                  <canvas id="p2-cam-canvas" width="300" height="160" class="w-full h-full object-cover"></canvas>
+                </div>
+              </div>
+
+              <!-- Interactive Editor Overlays (visible only in Edit mode) -->
+              <div id="editor-overlay-layer" class="hidden absolute inset-0 pointer-events-none">
+                <!-- Draggable & Resizable Facecam Box -->
+                <div id="drag-facecam-box" class="hidden pointer-events-auto absolute border-2 border-cyan-400 bg-cyan-400/10 rounded cursor-move flex items-start justify-between p-1" style="left:5%;top:20%;width:28%;height:24%;">
+                  <span class="px-1 py-0.5 rounded bg-cyan-500 text-zinc-950 text-[9px] font-bold">FACECAM</span>
+                  <div id="facecam-resize-handle" title="Drag to resize facecam" class="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 rounded-sm bg-cyan-400 border border-zinc-950 cursor-nwse-resize"></div>
+                </div>
+                <!-- Draggable Hook Banner -->
+                <div id="drag-hook-box" class="pointer-events-auto absolute left-1/2 -translate-x-1/2 cursor-ns-resize px-3 py-1 rounded bg-white text-zinc-950 font-extrabold text-[11px] uppercase shadow-lg text-center max-w-[90%]" style="top:8%;">
+                  HOOK TITLE (DRAG Y)
+                </div>
+                <!-- Draggable Word Subtitle Preview -->
+                <div id="drag-sub-box" class="pointer-events-auto absolute left-1/2 -translate-x-1/2 cursor-ns-resize px-2.5 py-1 rounded bg-black/80 text-white font-black text-[12px] uppercase shadow-lg text-center whitespace-nowrap" style="top:76%;">
+                  WORD <span id="drag-sub-hl" style="color:#FFFF00;">SUBTITLE</span> (DRAG Y)
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Compact Editor Controls Bar (visible only in Edit mode) -->
+          <div id="editor-controls-bar" class="hidden mb-2 p-3 rounded-xl bg-[#11131A] border border-indigo-500/30 space-y-2.5 text-[11px]">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-1.5 cursor-pointer text-zinc-200">
+                  <input id="ed-subtitles" type="checkbox" checked onchange="syncEditorPreview()" class="accent-indigo-500" /> Subtitles
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer text-zinc-200">
+                  <input id="ed-hook" type="checkbox" checked onchange="syncEditorPreview()" class="accent-indigo-500" /> Hook
+                </label>
+                <label class="flex items-center gap-1.5 text-zinc-300">
+                  Color <input id="ed-color" type="color" value="#FFFF00" oninput="syncEditorPreview()" class="w-5 h-5 rounded bg-transparent border-0 cursor-pointer" />
+                </label>
+                <label class="flex items-center gap-1.5 text-zinc-300">
+                  Profile
+                  <select id="ed-profile" onchange="onEditorProfileChange()" class="h-7 px-2 rounded bg-[#090A0F] border border-white/[0.1] text-zinc-200">
+                    <option value="profile1">Profile 1</option>
+                    <option value="profile2">Profile 2 (9:16 Split)</option>
+                  </select>
+                </label>
+                <label class="flex items-center gap-1.5 text-zinc-300">
+                  Layout
+                  <select id="ed-layout" onchange="syncEditorPreview()" class="h-7 px-2 rounded bg-[#090A0F] border border-white/[0.1] text-zinc-200">
+                    <option value="gameplay">gameplay (blur-fill)</option>
+                    <option value="facecam">facecam (split)</option>
+                    <option value="full_game">full_game (9:16 no cam)</option>
+                    <option value="cam">cam (fullscreen)</option>
+                  </select>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer text-zinc-200">
+                  <input id="ed-show-facecam" type="checkbox" checked onchange="onToggleFacecamInEditor()" class="accent-cyan-400" /> Facecam
+                </label>
+                <button type="button" id="btn-pick-facecam" onclick="toggleFacecamPicker()" class="h-7 px-2.5 rounded bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 font-semibold">
+                  ⌖ Pick Facecam
+                </button>
+              </div>
+              <button id="btn-rerender-clip" onclick="rerenderEditedClip()" class="h-7 px-3 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-semibold">
+                Apply & Re-render
+              </button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3 pt-1">
+              <div class="flex items-center gap-2">
+                <span class="text-zinc-400 shrink-0">Trim Start: <strong id="ed-start-lbl" class="text-zinc-200 tabular-nums">0.0s</strong></span>
+                <input id="ed-start" type="range" min="0" max="30" step="0.5" value="0" oninput="onTrimSlider()" class="flex-1" />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-zinc-400 shrink-0">Duration: <strong id="ed-dur-lbl" class="text-zinc-200 tabular-nums">20.0s</strong></span>
+                <input id="ed-dur" type="range" min="5" max="75" step="0.5" value="20" oninput="onTrimSlider()" class="flex-1" />
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-zinc-400 shrink-0">Game Pan: <strong id="ed-gamex-lbl" class="text-zinc-200 tabular-nums">50%</strong></span>
+                <input id="ed-gamex" type="range" min="0" max="100" step="1" value="50" oninput="onGamePanSlider()" class="flex-1" />
+              </div>
+            </div>
+
+            <div class="space-y-1 pt-1">
+              <div class="flex items-center justify-between">
+                <label class="block text-zinc-400">Subtitle Transcript (edit words/typos)</label>
+                <button type="button" onclick="retranscribeClip()" class="px-2 py-0.5 rounded bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.08] text-[10px] text-zinc-200 font-medium">↻ Re-transcribe</button>
+              </div>
+              <textarea id="ed-words-text" rows="3" oninput="wordsEdited=true" placeholder="Word timestamps will load here (or click Re-transcribe)..." class="w-full p-2 rounded-lg bg-[#090A0F] border border-white/[0.08] text-zinc-200 text-[11px] leading-snug resize-none"></textarea>
+            </div>
+          </div>
+
+          <div class="pt-3 mt-1 border-t border-white/[0.06] flex items-center gap-3">
+            <button id="play-pause-btn" onclick="togglePlayPause()" class="h-8 px-3 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-[12px] font-medium flex items-center gap-1.5 shrink-0">
+              <span id="play-btn-text">▶ Play</span>
+            </button>
+            <input id="video-scrubber" type="range" min="0" max="100" value="0" oninput="scrubVideo(this.value)" class="flex-1" />
+            <span id="video-timestamp" class="text-[11px] font-mono text-zinc-400 tabular-nums shrink-0">00:00 / 00:00</span>
+          </div>
+        </div>
+
+        <!-- METADATA STUDIO -->
+        <div class="w-full xl:w-[320px] shrink-0 bg-[#11131A]/70 p-5 flex flex-col justify-between space-y-4">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <h2 class="text-[12px] font-semibold tracking-wide uppercase text-zinc-300">Post Metadata & Caption</h2>
+              <span class="text-[11px] text-indigo-400 font-medium">AI Optimized</span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span class="px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.07] text-zinc-300">Category: <strong id="meta-category" class="font-medium text-white">-</strong></span>
+              <span class="px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 tabular-nums">Score: <strong id="meta-score" class="font-semibold">-</strong></span>
+              <span class="px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.07] text-zinc-300">Layout: <strong id="meta-layout" class="font-medium text-white">-</strong></span>
+              <span class="px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.07] text-zinc-300 tabular-nums"><strong id="meta-duration" class="font-medium text-white">0.0s</strong></span>
+            </div>
+
+            <div class="space-y-3">
+              <div class="space-y-1">
+                <label class="block text-[11px] font-medium text-zinc-400">Hook Overlay</label>
+                <input id="field-hook" type="text" oninput="syncEditorPreview()" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] font-medium text-zinc-100" />
+              </div>
+              <div class="space-y-1">
+                <label class="block text-[11px] font-medium text-zinc-400">Video Title</label>
+                <input id="field-title" type="text" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-100" />
+              </div>
+              <div class="space-y-1">
+                <label class="block text-[11px] font-medium text-zinc-400">Social Caption</label>
+                <textarea id="field-caption" rows="3" class="w-full p-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-zinc-200 leading-relaxed resize-none"></textarea>
+              </div>
+              <div class="space-y-1">
+                <label class="block text-[11px] font-medium text-zinc-400">Hashtags</label>
+                <input id="field-hashtags" type="text" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-[12px] text-indigo-300 font-medium" />
+              </div>
+            </div>
+          </div>
+
+          <button onclick="copyAllMetadata()" class="w-full h-10 px-4 rounded-lg bg-[#181B24] hover:bg-[#202430] border border-white/[0.12] hover:border-indigo-500/40 text-zinc-100 text-[12px] font-medium transition-all flex items-center justify-center gap-2">
+            <span id="copy-btn-label">Copy All Metadata</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- LLM CONNECTOR SETTINGS MODAL -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-2xl bg-[#11131A] border border-white/[0.1] shadow-2xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+        <div>
+          <h3 class="text-[14px] font-semibold text-white">Local / Cloud LLM Moment Selector</h3>
+          <p class="text-[11px] text-zinc-400">Only chooses viral timestamps & metadata. Never touches video.</p>
+        </div>
+        <button onclick="toggleSettingsModal()" class="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-white/[0.06]">✕</button>
+      </div>
+      <div class="p-5 space-y-3.5 text-[12px]">
+        <div class="space-y-1">
+          <label class="block font-medium text-zinc-400">Provider Preset</label>
+          <select id="llm-preset" onchange="onPresetChange()" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-zinc-200">
+            <option>Ollama (Local)</option>
+            <option>LM Studio (Local)</option>
+            <option>OpenAI API</option>
+            <option>Groq API</option>
+            <option>Custom</option>
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label class="block font-medium text-zinc-400">API Base URL</label>
+          <div class="flex gap-2">
+            <input id="llm-base-url" type="text" class="flex-1 h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-zinc-200" />
+            <button onclick="saveLlmSettings()" class="h-9 px-3 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-zinc-200 font-medium">Save</button>
+          </div>
+        </div>
+        <div class="space-y-1">
+          <label class="block font-medium text-zinc-400">Model</label>
+          <div class="flex gap-2">
+            <input id="llm-model" list="llm-model-list" type="text" class="flex-1 h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-zinc-200" />
+            <datalist id="llm-model-list"></datalist>
+            <button onclick="refreshLlmModels()" class="h-9 px-3 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-zinc-200 font-medium">Refresh</button>
+          </div>
+        </div>
+        <div class="space-y-1">
+          <label class="block font-medium text-zinc-400">API Key (optional for local LLMs)</label>
+          <input id="llm-api-key" type="password" placeholder="local" class="w-full h-9 px-3 rounded-lg bg-[#090A0F] border border-white/[0.08] text-zinc-200" />
+        </div>
+        <div class="flex items-center gap-3 pt-1">
+          <button onclick="testLlm()" class="h-8 px-3 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] text-zinc-200 font-medium">Test LLM Connection</button>
+          <span id="llm-test-status" class="text-[11px] text-zinc-400"></span>
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-[#0D0F15] border-t border-white/[0.08] flex justify-end gap-2">
+        <button onclick="toggleSettingsModal()" class="h-8 px-3 rounded-lg text-[12px] text-zinc-400 hover:text-white">Close</button>
+        <button onclick="saveLlmSettings(true)" class="h-8 px-4 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-[12px] font-medium">Save & Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PRESETS = {
+      'Ollama (Local)': ['http://localhost:11434/v1', 'qwen2.5:7b'],
+      'LM Studio (Local)': ['http://localhost:1234/v1', 'local-model'],
+      'OpenAI API': ['https://api.openai.com/v1', 'gpt-4o-mini'],
+      'Groq API': ['https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'],
+      'Custom': ['http://localhost:11434/v1', '']
+    };
+
+    let state = { clips: [], history: [], logs: [], status: 'idle', stage: 1, settings: {} };
+    let selectedClipIndex = null;
+    let currentRatio = '9:16';
+    let sortByScore = false;
+    let settingsInitialized = false;
+    let lastLogCount = 0;
+
+    const videoEl = document.getElementById('clip-video-player');
+    videoEl.addEventListener('timeupdate', () => {
+      if (!videoEl.duration) return;
+      document.getElementById('video-scrubber').value = Math.round((videoEl.currentTime / videoEl.duration) * 100);
+      document.getElementById('video-timestamp').textContent = `${formatSec(videoEl.currentTime)} / ${formatSec(videoEl.duration)}`;
+    });
+    videoEl.addEventListener('play', () => { document.getElementById('play-btn-text').textContent = '❚❚ Pause'; });
+    videoEl.addEventListener('pause', () => { document.getElementById('play-btn-text').textContent = '▶ Play'; });
+
+    function formatSec(s) {
+      const m = Math.floor(s / 60).toString().padStart(2, '0');
+      const sec = Math.floor(s % 60).toString().padStart(2, '0');
+      return `${m}:${sec}`;
+    }
+
+    async function api(path, body = null) {
+      const opts = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
+      const res = await fetch(path, opts);
+      return res.json();
+    }
+
+    async function pollState() {
+      try {
+        const data = await api('/api/state');
+        state = data;
+        if (!settingsInitialized) {
+          applySettings(data.settings, data.active_run_dir);
+          settingsInitialized = true;
+        }
+        renderHeader(data);
+        renderClipsList();
+        renderHistoryList();
+        renderLogs(data.logs || []);
+      } catch (e) {}
+    }
+
+    function applySettings(s, activeRunDir) {
+      document.getElementById('output-folder').value = activeRunDir || '';
+      document.getElementById('pipeline-mode').value = s.mode_index === 1 ? 'live' : 'vod';
+      onModeChange(false);
+      setPill('exp-916', s.ratio_916 !== false);
+      setPill('exp-11', s.ratio_11 !== false);
+      setPill('exp-169', s.ratio_169 !== false);
+      setSwitch('sw-subtitles', s.subtitles !== false);
+      setSwitch('sw-hook', s.enable_hook !== false);
+      document.getElementById('min-score').value = s.min_score ?? 7.0;
+      document.getElementById('max-clips').value = s.max_clips ?? 10;
+      document.getElementById('block-min').value = s.block_min ?? 10;
+      document.getElementById('whisper-model').value = s.whisper_model || 'small.en';
+      document.getElementById('compute-mode').value = s.compute_mode || 'auto';
+      document.getElementById('export-profile').value = s.profile || 'profile1';
+      onProfileChange();
+      document.getElementById('buffer-min').value = s.buffer_min ?? 15;
+      document.getElementById('cookies-browser').value = s.cookies_browser || '';
+      document.getElementById('cookies-file').value = s.cookies_file || '';
+      document.getElementById('llm-preset').value = s.preset || 'Ollama (Local)';
+      document.getElementById('llm-base-url').value = s.base_url || 'http://localhost:11434/v1';
+      document.getElementById('llm-model').value = s.model || 'qwen2.5:7b';
+      document.getElementById('llm-api-key').value = s.api_key || '';
+    }
+
+    function renderHeader(data) {
+      document.getElementById('stat-blocks').textContent = data.blocks_count ?? 0;
+      document.getElementById('stat-winners').textContent = data.winners_count ?? 0;
+      document.getElementById('stat-ready').textContent = (data.clips || []).length;
+      document.getElementById('clips-count-badge').textContent = (data.clips || []).length;
+      document.getElementById('history-count-badge').textContent = (data.history || []).length;
+
+      const pill = document.getElementById('header-status-pill');
+      const st = data.status;
+      const resumeBtn = document.getElementById('resume-clipping-btn');
+      const startBtn = document.getElementById('start-clipping-btn');
+      const stopBtn = document.getElementById('stop-clipping-btn');
+      const isRunning = st === 'running' || st === 'stopping';
+      const isStopped = st === 'stopped';
+      stopBtn.classList.toggle('hidden', !isRunning);
+      stopBtn.disabled = (st === 'stopping');
+      resumeBtn.classList.toggle('hidden', !isStopped);
+      startBtn.disabled = isRunning;
+      if (st === 'running') {
+        startBtn.className = 'flex-1 h-9 px-4 rounded-lg bg-indigo-500/70 text-white text-[12px] font-medium flex items-center justify-center gap-2 transition-all cursor-wait';
+        startBtn.innerHTML = '<span class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span><span>Clipping...</span>';
+      } else if (st === 'stopping') {
+        startBtn.className = 'flex-1 h-9 px-4 rounded-lg bg-amber-500/70 text-white text-[12px] font-medium flex items-center justify-center gap-2 transition-all cursor-wait';
+        startBtn.innerHTML = '<span>Stopping...</span>';
+      } else if (isStopped) {
+        startBtn.className = 'flex-1 h-9 px-3 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-zinc-200 text-[12px] font-medium flex items-center justify-center gap-1.5 transition-all';
+        startBtn.innerHTML = '<span>Start Again</span>';
+      } else {
+        startBtn.className = 'flex-1 h-9 px-4 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-[12px] font-medium flex items-center justify-center gap-2 transition-all';
+        startBtn.innerHTML = '<svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg><span>Start Clipping</span>';
+      }
+      if (st === 'running') {
+        pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/30';
+        pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping"></span> Running (' + formatSec(data.elapsed_sec || 0) + ')';
+      } else if (st === 'stopping') {
+        pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30';
+        pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Stopping...';
+      } else if (st === 'stopped') {
+        pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30';
+        pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Stopped (${(data.clips || []).length} Clips)`;
+      } else if (st === 'done' || (data.clips || []).length > 0) {
+        pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+        pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Loaded ${(data.clips || []).length} Clips`;
+      } else if (st === 'error') {
+        pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/15 text-rose-400 border border-rose-500/30';
+        pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Error';
+      } else {
+        pill.className = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800 text-zinc-300 border border-white/[0.08]';
+        pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-zinc-400"></span> Idle';
+      }
+
+      for (let i = 1; i <= 3; i++) {
+        const el = document.getElementById(`step-${i}`);
+        const num = el.querySelector('.step-num');
+        if (i < data.stage) {
+          el.className = 'step-pill flex items-center gap-2 px-2.5 py-1 rounded-md text-zinc-200 bg-white/[0.04] border border-white/[0.08]';
+          num.className = 'step-num w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-semibold';
+          num.textContent = '✓';
+        } else if (i === data.stage) {
+          el.className = 'step-pill flex items-center gap-2 px-2.5 py-1 rounded-md text-indigo-300 bg-indigo-500/15 border border-indigo-500/30';
+          num.className = 'step-num w-4 h-4 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[10px] font-semibold';
+          num.textContent = String(i);
+        } else {
+          el.className = 'step-pill flex items-center gap-2 px-2.5 py-1 rounded-md text-zinc-400 bg-white/[0.04] border border-white/[0.08]';
+          num.className = 'step-num w-4 h-4 rounded-full bg-white/[0.08] text-zinc-400 flex items-center justify-center text-[10px] font-semibold';
+          num.textContent = String(i);
+        }
+      }
+    }
+
+    const playedCompletedClips = new Set();
+    let lastClipsSignature = '';
+
+    function renderClipsList() {
+      const container = document.getElementById('clips-list-container');
+      const list = [...(state.clips || [])];
+      if (sortByScore) list.sort((a, b) => (b.score || 0) - (a.score || 0));
+      if (list.length === 0) {
+        if (lastClipsSignature !== 'EMPTY') {
+          lastClipsSignature = 'EMPTY';
+          container.innerHTML = '<div class="text-center text-zinc-500 text-[12px] py-10">No clips yet. Start a run or load from History.</div>';
+        }
+        return;
+      }
+
+      const newlyReady = list.find(c => {
+        const hasFiles = c.files && Object.keys(c.files).length > 0;
+        return hasFiles && !playedCompletedClips.has(c.index);
+      });
+      if (newlyReady) {
+        playedCompletedClips.add(newlyReady.index);
+        if (stageMode !== 'edit' && (selectedClipIndex === null || videoEl.paused || selectedClipIndex === newlyReady.index)) {
+          selectClip(newlyReady.index, true);
+        }
+      }
+
+      const sig = JSON.stringify(list.map(c => [c.index, c.status, c.progress, c.status_text, c.task_step, c.files])) + '|' + selectedClipIndex + '|' + sortByScore;
+      if (sig === lastClipsSignature) return;
+      lastClipsSignature = sig;
+
+      container.innerHTML = list.map(clip => {
+        const isSel = clip.index === selectedClipIndex;
+        const hasFiles = clip.files && Object.keys(clip.files).length > 0;
+        const pct = Math.max(0, Math.min(100, Number(clip.progress ?? (hasFiles ? 100 : 15))));
+        const statusText = clip.status_text || (hasFiles ? 'Ready' : 'Processing');
+        const step = Number(clip.task_step || 1);
+        const total = Number(clip.task_total || 3);
+        const isWorking = !hasFiles && clip.status !== 'completed';
+        return `
+          <div ${hasFiles ? `onclick="selectClip(${clip.index}, true)"` : ''} class="${hasFiles ? 'cursor-pointer' : 'cursor-default'} p-3 rounded-xl border transition-all ${
+            isSel ? 'bg-[#181B24] border-indigo-500/60 shadow-md' : 'bg-[#11131A]/80 hover:bg-[#181B24]/70 border-white/[0.07]'
+          }">
+            <div class="flex items-start justify-between gap-2 mb-1.5">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold ${isSel ? 'bg-indigo-500 text-white' : isWorking ? 'bg-amber-500/20 text-amber-300' : 'bg-white/[0.06] text-zinc-400'}">#${String(clip.index).padStart(2,'0')}</span>
+                <h3 class="text-[12px] font-medium truncate ${isSel ? 'text-white' : 'text-zinc-200'}">${escapeHtml(clip.title)}</h3>
+              </div>
+              <span class="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 tabular-nums">${Number(clip.score).toFixed(1)}</span>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-zinc-400">
+              <span class="tabular-nums">${Number(clip.duration_sec).toFixed(1)}s • ${escapeHtml(clip.category)}</span>
+              ${isWorking
+                ? `<span class="text-[10px] font-medium text-indigo-300 tabular-nums">Step ${step}/${total}: ${escapeHtml(statusText)} (${pct}%)</span>`
+                : `<div class="flex gap-1">${(clip.ratios || []).map(r => `<span class="px-1.5 rounded text-[10px] font-mono bg-[#090A0F] border border-white/[0.06]">${r}</span>`).join('')}</div>`
+              }
+            </div>
+            ${isWorking ? `
+              <div class="mt-2 space-y-1">
+                <div class="h-1.5 w-full rounded-full bg-white/[0.07] overflow-hidden">
+                  <div class="h-full rounded-full bg-indigo-500 transition-all duration-300" style="width:${pct}%"></div>
+                </div>
+                <div class="flex items-center justify-between text-[9px] font-mono text-zinc-500">
+                  <span class="${step > 1 ? 'text-emerald-400' : step === 1 ? 'text-indigo-300' : ''}">${step > 1 ? '✓' : '●'} Download</span>
+                  <span class="${step > 2 ? 'text-emerald-400' : step === 2 ? 'text-indigo-300' : ''}">${step > 2 ? '✓' : step === 2 ? '●' : '○'} Transcribe</span>
+                  <span class="${step > 3 ? 'text-emerald-400' : step === 3 ? 'text-indigo-300' : ''}">${step === 3 ? '●' : '○'} Render</span>
+                </div>
+              </div>
+            ` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    let stageMode = 'preview';
+    let editState = null;
+    let wordsEdited = false;
+    let pickingFacecam = false;
+    const p2GameVideo = document.getElementById('p2-game-video');
+    const p2CamCanvas = document.getElementById('p2-cam-canvas');
+    const p2CamCtx = p2CamCanvas.getContext('2d');
+
+    function selectClip(index, forceReload = false) {
+      const clip = (state.clips || []).find(c => c.index === index);
+      if (!clip || !clip.files || Object.keys(clip.files).length === 0) return;
+      selectedClipIndex = index;
+      document.getElementById('meta-category').textContent = clip.category || '-';
+      document.getElementById('meta-score').textContent = Number(clip.score || 0).toFixed(1);
+      document.getElementById('meta-layout').textContent = clip.layout || '-';
+      document.getElementById('meta-duration').textContent = `${Number(clip.duration_sec || 0).toFixed(1)}s`;
+      document.getElementById('field-hook').value = clip.hook || '';
+      document.getElementById('field-title').value = clip.title || '';
+      document.getElementById('field-caption').value = clip.caption || '';
+      document.getElementById('field-hashtags').value = (clip.hashtags || []).join(' ');
+
+      const files = clip.files || {};
+      if (!files[currentRatio] && Object.keys(files).length > 0) {
+        currentRatio = Object.keys(files)[0];
+      }
+      if (stageMode === 'edit') loadEditStateForSelected();
+      else setPreviewRatio(currentRatio, forceReload);
+      renderClipsList();
+    }
+
+    function setPreviewRatio(ratio, forceReload = false) {
+      currentRatio = ratio;
+      const frame = document.getElementById('video-stage-frame');
+      document.querySelectorAll('.ratio-switcher-btn').forEach(b => {
+        b.className = 'ratio-switcher-btn px-2.5 py-1 rounded-md text-[11px] font-medium tabular-nums text-zinc-400 hover:text-zinc-200';
+      });
+      const active = document.getElementById(`ratio-btn-${ratio.replace(':', '-')}`);
+      if (active) active.className = 'ratio-switcher-btn px-2.5 py-1 rounded-md text-[11px] font-medium tabular-nums bg-indigo-500 text-white';
+
+      const borderCol = stageMode === 'edit' ? 'border-indigo-500/50' : 'border-white/[0.12]';
+      const effectiveRatio = (stageMode === 'edit' && pickingFacecam) ? '16:9' : ratio;
+      if (effectiveRatio === '9:16') frame.className = `relative w-[300px] h-[533px] rounded-2xl overflow-hidden bg-[#05070B] border ${borderCol} shadow-2xl flex items-center justify-center select-none`;
+      else if (effectiveRatio === '1:1') frame.className = `relative w-[420px] h-[420px] rounded-2xl overflow-hidden bg-[#05070B] border ${borderCol} shadow-2xl flex items-center justify-center select-none`;
+      else frame.className = `relative w-full max-w-[740px] aspect-video rounded-2xl overflow-hidden bg-[#05070B] border ${borderCol} shadow-2xl flex items-center justify-center select-none`;
+
+      if (stageMode === 'edit') return;
+
+      document.getElementById('p2-split-preview').classList.add('hidden');
+      videoEl.classList.remove('hidden');
+
+      const clip = (state.clips || []).find(c => c.index === selectedClipIndex);
+      const path = clip?.files?.[ratio] || Object.values(clip?.files || {})[0];
+      if (path) {
+        document.getElementById('preview-clip-badge').textContent = path.split(/[\\/]/).pop();
+        const nextUrl = `/api/video?path=${encodeURIComponent(path)}`;
+        if (forceReload || !videoEl.getAttribute('src') || videoEl.getAttribute('src').split('&t=')[0] !== nextUrl) {
+          videoEl.setAttribute('src', `${nextUrl}${forceReload ? '&t=' + Date.now() : ''}`);
+          videoEl.load();
+        }
+        const tryPlay = () => videoEl.play().catch(() => {
+          videoEl.muted = true;
+          videoEl.play().catch(() => {});
+        });
+        if (videoEl.readyState >= 2) tryPlay();
+        else videoEl.addEventListener('canplay', tryPlay, { once: true });
+      }
+    }
+
+    async function setStageMode(mode) {
+      stageMode = mode;
+      pickingFacecam = false;
+      const isEdit = mode === 'edit';
+      document.getElementById('stage-mode-preview').className = isEdit ? 'px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-200' : 'px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#181B24] text-white';
+      document.getElementById('stage-mode-edit').className = isEdit ? 'px-2.5 py-1 rounded-md text-[11px] font-medium bg-indigo-500 text-white' : 'px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-200';
+      document.getElementById('editor-overlay-layer').classList.toggle('hidden', !isEdit);
+      document.getElementById('editor-controls-bar').classList.toggle('hidden', !isEdit);
+      if (isEdit) {
+        await loadEditStateForSelected();
+      } else {
+        document.getElementById('p2-split-preview').classList.add('hidden');
+        videoEl.classList.remove('hidden');
+        setPreviewRatio(currentRatio, false);
+      }
+    }
+
+    async function loadEditStateForSelected() {
+      if (selectedClipIndex === null) return;
+      const runDir = document.getElementById('output-folder').value || state.active_run_dir;
+      const res = await api(`/api/clip/edit_state?run_dir=${encodeURIComponent(runDir)}&index=${selectedClipIndex}`);
+      if (!res.ok) {
+        showToast(res.error || 'Source window.mp4 not found for editing');
+        return setStageMode('preview');
+      }
+      editState = res.edit_state;
+      pickingFacecam = false;
+      setPreviewRatio(currentRatio);
+
+      document.getElementById('preview-clip-badge').textContent = 'window.mp4 (source)';
+      const winUrl = `/api/video?path=${encodeURIComponent(editState.window_video)}`;
+      if (videoEl.getAttribute('src') !== winUrl) {
+        videoEl.setAttribute('src', winUrl);
+        videoEl.load();
+      }
+      if (p2GameVideo.getAttribute('src') !== winUrl) {
+        p2GameVideo.setAttribute('src', winUrl);
+        p2GameVideo.load();
+      }
+      videoEl.currentTime = editState.local_start || 0;
+      p2GameVideo.currentTime = editState.local_start || 0;
+
+      document.getElementById('ed-subtitles').checked = editState.enable_subtitles !== false;
+      document.getElementById('ed-hook').checked = editState.enable_hook !== false;
+      document.getElementById('ed-color').value = editState.highlight_color || '#FFFF00';
+      document.getElementById('ed-profile').value = editState.profile || 'profile1';
+      document.getElementById('ed-layout').value = editState.layout || 'gameplay';
+      document.getElementById('ed-gamex').value = editState.game_x_pct ?? 50;
+      onGamePanSlider();
+
+      const winDur = editState.window_duration || (editState.local_start + editState.duration + 5) || 60;
+      const startEl = document.getElementById('ed-start');
+      startEl.max = Math.max(0, winDur - 5).toFixed(1);
+      startEl.value = editState.local_start || 0;
+      const durEl = document.getElementById('ed-dur');
+      durEl.max = Math.min(75, winDur).toFixed(1);
+      durEl.value = editState.duration || 20;
+      onTrimSlider();
+
+      document.getElementById('drag-hook-box').style.top = `${editState.hook_y_pct ?? 8}%`;
+      document.getElementById('drag-sub-box').style.top = `${editState.sub_y_pct ?? 76}%`;
+
+      const fc = editState.facecam || {};
+      const fw = fc.frame_w || 1920, fh = fc.frame_h || 1080;
+      const fcEl = document.getElementById('drag-facecam-box');
+      fcEl.style.left = `${((fc.x || 0) / fw) * 100}%`;
+      fcEl.style.top = `${((fc.y || 0) / fh) * 100}%`;
+      fcEl.style.width = `${((fc.w || fw * 0.25) / fw) * 100}%`;
+      fcEl.style.height = `${((fc.h || fh * 0.25) / fh) * 100}%`;
+
+      document.getElementById('ed-words-text').value = (editState.words || []).map(w => w.word).join(' ');
+      wordsEdited = false;
+
+      syncEditorPreview();
+    }
+
+    async function retranscribeClip() {
+      if (!editState || selectedClipIndex === null) return;
+      showToast('Re-transcribing trimmed window...');
+      const res = await api('/api/clip/retranscribe', {
+        run_dir: document.getElementById('output-folder').value || state.active_run_dir,
+        index: selectedClipIndex,
+        local_start: parseFloat(document.getElementById('ed-start').value),
+        duration: parseFloat(document.getElementById('ed-dur').value),
+      });
+      if (res.ok) {
+        editState.words = res.words || [];
+        document.getElementById('ed-words-text').value = editState.words.map(w => w.word).join(' ');
+        wordsEdited = false;
+        showToast(`Transcribed ${editState.words.length} words`);
+      } else {
+        showToast(res.error || 'Re-transcribe failed');
+      }
+    }
+
+    function onGamePanSlider() {
+      const gx = parseFloat(document.getElementById('ed-gamex').value);
+      document.getElementById('ed-gamex-lbl').textContent = `${Math.round(gx)}%`;
+      p2GameVideo.style.objectPosition = `${gx}% 50%`;
+    }
+
+    function toggleFacecamPicker() {
+      pickingFacecam = !pickingFacecam;
+      const btn = document.getElementById('btn-pick-facecam');
+      btn.className = pickingFacecam
+        ? 'h-7 px-2.5 rounded bg-cyan-400 text-zinc-950 font-bold'
+        : 'h-7 px-2.5 rounded bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 font-semibold';
+      btn.textContent = pickingFacecam ? '✓ Done Facecam' : '⌖ Pick Facecam';
+      setPreviewRatio(currentRatio);
+      syncEditorPreview();
+    }
+
+    function onTrimSlider() {
+      const s = parseFloat(document.getElementById('ed-start').value);
+      const d = parseFloat(document.getElementById('ed-dur').value);
+      document.getElementById('ed-start-lbl').textContent = `${s.toFixed(1)}s`;
+      document.getElementById('ed-dur-lbl').textContent = `${d.toFixed(1)}s`;
+      if (stageMode === 'edit' && videoEl.readyState >= 1) {
+        videoEl.currentTime = s;
+        p2GameVideo.currentTime = s;
+      }
+    }
+
+    function onToggleFacecamInEditor() {
+      const showCam = document.getElementById('ed-show-facecam').checked;
+      document.getElementById('ed-layout').value = showCam ? 'facecam' : 'full_game';
+      syncEditorPreview();
+    }
+
+    function syncEditorPreview() {
+      const showSub = document.getElementById('ed-subtitles').checked;
+      const showHook = document.getElementById('ed-hook').checked;
+      const color = document.getElementById('ed-color').value;
+      const profile = document.getElementById('ed-profile').value;
+      const layout = document.getElementById('ed-layout').value;
+      const hookTxt = document.getElementById('field-hook').value.trim().toUpperCase() || 'HOOK TITLE';
+
+      document.getElementById('ed-show-facecam').checked = (layout !== 'full_game');
+
+      const showP2OrFull = stageMode === 'edit' && !pickingFacecam && (profile === 'profile2' || layout === 'full_game');
+      document.getElementById('p2-split-preview').classList.toggle('hidden', !showP2OrFull);
+      videoEl.classList.toggle('hidden', showP2OrFull);
+
+      const isFullGame = (layout === 'full_game');
+      document.getElementById('p2-cam-panel').classList.toggle('hidden', isFullGame);
+      document.getElementById('p2-game-pan-area').className = 'absolute inset-0 w-full h-full overflow-hidden bg-black cursor-ew-resize';
+
+      const hookBox = document.getElementById('drag-hook-box');
+      hookBox.textContent = hookTxt;
+      hookBox.classList.toggle('hidden', !showHook || pickingFacecam);
+
+      const subBox = document.getElementById('drag-sub-box');
+      subBox.classList.toggle('hidden', !showSub || pickingFacecam);
+      document.getElementById('drag-sub-hl').style.color = color;
+
+      document.getElementById('drag-facecam-box').classList.toggle('hidden', !pickingFacecam);
+    }
+
+    async function rerenderEditedClip() {
+      if (!editState || selectedClipIndex === null) return;
+      const btn = document.getElementById('btn-rerender-clip');
+      btn.disabled = true;
+      btn.textContent = 'Rendering...';
+      try {
+        const fcEl = document.getElementById('drag-facecam-box');
+        const fw = editState.facecam?.frame_w || 1920;
+        const fh = editState.facecam?.frame_h || 1080;
+        const durVal = parseFloat(document.getElementById('ed-dur').value);
+        const editedTokens = document.getElementById('ed-words-text').value.trim().split(/\s+/).filter(Boolean);
+        let updatedWords = editState.words || [];
+        if (editedTokens.length > 0) {
+          if (updatedWords.length === editedTokens.length) {
+            updatedWords = updatedWords.map((w, i) => ({ word: editedTokens[i], start: w.start, end: w.end }));
+          } else {
+            const step = durVal / editedTokens.length;
+            updatedWords = editedTokens.map((tok, i) => ({
+              word: tok,
+              start: Number((i * step).toFixed(3)),
+              end: Number(((i + 1) * step).toFixed(3)),
+            }));
+          }
+        }
+        const payload = {
+          run_dir: document.getElementById('output-folder').value || state.active_run_dir,
+          index: selectedClipIndex,
+          local_start: parseFloat(document.getElementById('ed-start').value),
+          duration: durVal,
+          enable_subtitles: document.getElementById('ed-subtitles').checked,
+          enable_hook: document.getElementById('ed-hook').checked,
+          hook_text: document.getElementById('field-hook').value.trim(),
+          title: document.getElementById('field-title').value.trim(),
+          caption: document.getElementById('field-caption').value.trim(),
+          hashtags: document.getElementById('field-hashtags').value.trim(),
+          hook_y_pct: Number.isFinite(parseFloat(document.getElementById('drag-hook-box').style.top)) ? parseFloat(document.getElementById('drag-hook-box').style.top) : 8,
+          sub_y_pct: Number.isFinite(parseFloat(document.getElementById('drag-sub-box').style.top)) ? parseFloat(document.getElementById('drag-sub-box').style.top) : 76,
+          highlight_color: document.getElementById('ed-color').value,
+          profile: document.getElementById('ed-profile').value,
+          game_x_pct: Number.isFinite(parseFloat(document.getElementById('ed-gamex').value)) ? parseFloat(document.getElementById('ed-gamex').value) : 50,
+          layout: document.getElementById('ed-layout').value,
+          facecam: {
+            x: Math.round((parseFloat(fcEl.style.left) / 100) * fw),
+            y: Math.round((parseFloat(fcEl.style.top) / 100) * fh),
+            w: Math.round((parseFloat(fcEl.style.width) / 100) * fw),
+            h: Math.round((parseFloat(fcEl.style.height) / 100) * fh),
+          },
+          words: updatedWords,
+          words_edited: wordsEdited,
+          ratios: editState.ratios,
+        };
+        const res = await api('/api/clip/rerender', payload);
+        if (res.ok) {
+          await pollState();
+          stageMode = 'preview';
+          pickingFacecam = false;
+          document.getElementById('p2-split-preview').classList.add('hidden');
+          videoEl.classList.remove('hidden');
+          document.getElementById('stage-mode-preview').className = 'px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#181B24] text-white';
+          document.getElementById('stage-mode-edit').className = 'px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-200';
+          document.getElementById('editor-overlay-layer').classList.add('hidden');
+          document.getElementById('editor-controls-bar').classList.add('hidden');
+          setPreviewRatio(currentRatio, true);
+          showToast('Clip re-rendered!');
+        } else {
+          showToast(res.error || 'Re-render failed');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Apply & Re-render';
+      }
+    }
+
+    function makeDraggableY(el) {
+      el.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        const frame = document.getElementById('video-stage-frame').getBoundingClientRect();
+        const move = (ev) => {
+          const pct = Math.max(2, Math.min(88, ((ev.clientY - frame.top) / frame.height) * 100));
+          el.style.top = `${pct.toFixed(1)}%`;
+        };
+        const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+      });
+    }
+
+    function makeDraggableXY(el, handleEl) {
+      el.addEventListener('pointerdown', (e) => {
+        if (e.target === handleEl) return;
+        e.preventDefault();
+        const frame = document.getElementById('video-stage-frame').getBoundingClientRect();
+        const offX = e.clientX - el.getBoundingClientRect().left;
+        const offY = e.clientY - el.getBoundingClientRect().top;
+        const move = (ev) => {
+          const wPct = parseFloat(el.style.width) || 25;
+          const hPct = parseFloat(el.style.height) || 25;
+          const leftPct = Math.max(0, Math.min(100 - wPct, ((ev.clientX - frame.left - offX) / frame.width) * 100));
+          const topPct = Math.max(0, Math.min(100 - hPct, ((ev.clientY - frame.top - offY) / frame.height) * 100));
+          el.style.left = `${leftPct.toFixed(1)}%`;
+          el.style.top = `${topPct.toFixed(1)}%`;
+        };
+        const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+      });
+
+      handleEl.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const frame = document.getElementById('video-stage-frame').getBoundingClientRect();
+        const startLeftPct = parseFloat(el.style.left) || 0;
+        const startTopPct = parseFloat(el.style.top) || 0;
+        const move = (ev) => {
+          const curX = ((ev.clientX - frame.left) / frame.width) * 100;
+          const curY = ((ev.clientY - frame.top) / frame.height) * 100;
+          const wPct = Math.max(8, Math.min(100 - startLeftPct, curX - startLeftPct));
+          const hPct = Math.max(8, Math.min(100 - startTopPct, curY - startTopPct));
+          el.style.width = `${wPct.toFixed(1)}%`;
+          el.style.height = `${hPct.toFixed(1)}%`;
+        };
+        const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+      });
+    }
+
+    makeDraggableY(document.getElementById('drag-hook-box'));
+    makeDraggableY(document.getElementById('drag-sub-box'));
+    makeDraggableXY(document.getElementById('drag-facecam-box'), document.getElementById('facecam-resize-handle'));
+
+    // Drag bottom gameplay panel horizontally in Profile 2 Edit mode
+    document.getElementById('p2-game-pan-area').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startPan = parseFloat(document.getElementById('ed-gamex').value) || 50;
+      const w = document.getElementById('p2-game-pan-area').getBoundingClientRect().width || 300;
+      const move = (ev) => {
+        const deltaPct = ((startX - ev.clientX) / w) * 100;
+        const next = Math.max(0, Math.min(100, startPan + deltaPct));
+        document.getElementById('ed-gamex').value = next.toFixed(0);
+        onGamePanSlider();
+      };
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+
+    // Keep Profile 2 split-screen facecam canvas & bottom gameplay video synced with main videoEl
+    function syncP2SplitFrame() {
+      if (stageMode === 'edit' && !pickingFacecam && document.getElementById('ed-profile').value === 'profile2') {
+        if (Math.abs(p2GameVideo.currentTime - videoEl.currentTime) > 0.15) {
+          p2GameVideo.currentTime = videoEl.currentTime;
+        }
+        if (videoEl.paused && !p2GameVideo.paused) p2GameVideo.pause();
+        if (!videoEl.paused && p2GameVideo.paused) p2GameVideo.play().catch(() => {});
+
+        if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+          const fcEl = document.getElementById('drag-facecam-box');
+          const sx = ((parseFloat(fcEl.style.left) || 0) / 100) * videoEl.videoWidth;
+          const sy = ((parseFloat(fcEl.style.top) || 0) / 100) * videoEl.videoHeight;
+          const sw = Math.max(16, ((parseFloat(fcEl.style.width) || 25) / 100) * videoEl.videoWidth);
+          const sh = Math.max(16, ((parseFloat(fcEl.style.height) || 25) / 100) * videoEl.videoHeight);
+          p2CamCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, p2CamCanvas.width, p2CamCanvas.height);
+        }
+      }
+      requestAnimationFrame(syncP2SplitFrame);
+    }
+    requestAnimationFrame(syncP2SplitFrame);
+
+    function togglePlayPause() {
+      if (videoEl.paused) videoEl.play().catch(() => {}); else videoEl.pause();
+    }
+    function scrubVideo(pct) {
+      if (videoEl.duration) videoEl.currentTime = (pct / 100) * videoEl.duration;
+    }
+
+    function renderHistoryList() {
+      const q = (document.getElementById('history-search').value || '').toLowerCase();
+      const box = document.getElementById('history-list');
+      const items = (state.history || []).filter(h => !q || `${h.title} ${h.status} ${h.name}`.toLowerCase().includes(q));
+      box.innerHTML = items.map(h => `
+        <div class="history-card p-3 rounded-xl bg-[#181B24] border border-white/[0.08] space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${h.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}">${escapeHtml(h.status)}</span>
+            <span class="text-[10px] text-zinc-500">${escapeHtml(h.updated_at || '')}</span>
+          </div>
+          <h3 class="text-[12px] font-semibold text-zinc-100 leading-snug">${escapeHtml(h.title || h.name)}</h3>
+          <p class="text-[11px] text-zinc-400 tabular-nums">Win ${h.winners_count} • Done ${h.rendered_count} • <span class="font-mono text-[10px]">${escapeHtml(h.name)}</span></p>
+          <div class="pt-1 flex items-center gap-1.5 border-t border-white/[0.06]">
+            <button onclick="resumeRun('${escapeJs(h.run_dir)}')" class="flex-1 h-7 rounded bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 text-[11px] font-medium">Resume</button>
+            <button onclick="loadRun('${escapeJs(h.run_dir)}')" class="flex-1 h-7 rounded bg-white/[0.05] hover:bg-white/[0.1] text-zinc-200 text-[11px] font-medium">Load</button>
+            <button onclick="removeRun('${escapeJs(h.run_dir)}')" class="h-7 px-2 rounded bg-white/[0.04] hover:bg-rose-500/15 text-zinc-400 hover:text-rose-400 text-[11px]">✕</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderLogs(logs) {
+      if (logs.length === lastLogCount) return;
+      lastLogCount = logs.length;
+      const el = document.getElementById('pipeline-log-container');
+      el.textContent = logs.join('\n');
+      el.scrollTop = el.scrollHeight;
+    }
+
+    let lastRunUrl = '';
+
+    function clearStageWorkspace() {
+      selectedClipIndex = null;
+      lastClipsSignature = '';
+      playedCompletedClips.clear();
+      editState = null;
+      stageMode = 'preview';
+      pickingFacecam = false;
+      lastLogCount = 0;
+      document.getElementById('stage-mode-preview').className = 'px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#181B24] text-white';
+      document.getElementById('stage-mode-edit').className = 'px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-200';
+      document.getElementById('editor-overlay-layer').classList.add('hidden');
+      document.getElementById('editor-controls-bar').classList.add('hidden');
+      document.getElementById('p2-split-preview').classList.add('hidden');
+      videoEl.classList.remove('hidden');
+      videoEl.pause();
+      videoEl.removeAttribute('src');
+      videoEl.load();
+      p2GameVideo.pause();
+      p2GameVideo.removeAttribute('src');
+      p2GameVideo.load();
+      document.getElementById('preview-clip-badge').textContent = 'no clip selected';
+      document.getElementById('video-timestamp').textContent = '00:00 / 00:00';
+      document.getElementById('video-scrubber').value = 0;
+      document.getElementById('play-btn-text').textContent = '▶ Play';
+      document.getElementById('meta-category').textContent = '-';
+      document.getElementById('meta-score').textContent = '-';
+      document.getElementById('meta-layout').textContent = '-';
+      document.getElementById('meta-duration').textContent = '-';
+      document.getElementById('field-hook').value = '';
+      document.getElementById('field-title').value = '';
+      document.getElementById('field-caption').value = '';
+      document.getElementById('field-hashtags').value = '';
+      document.getElementById('pipeline-log-container').textContent = '';
+    }
+
+    async function triggerClippingRun(forceNew = false) {
+      const url = document.getElementById('stream-url').value.trim();
+      if (!url) return showToast('Enter a Video / Stream URL first');
+      const ratios = ['9:16', '1:1', '16:9'].filter(r => document.getElementById(`exp-${r.replace(':','')}`).getAttribute('data-active') === 'true');
+      if (!ratios.length) return showToast('Select at least one aspect ratio');
+      const res = await api('/api/start', {
+        mode: document.getElementById('pipeline-mode').value,
+        url,
+        out_dir: document.getElementById('output-folder').value.trim(),
+        force_new: !!forceNew,
+        ratios,
+        enable_subtitles: document.getElementById('sw-subtitles').getAttribute('aria-checked') === 'true',
+        enable_hook: document.getElementById('sw-hook').getAttribute('aria-checked') === 'true',
+        min_score: parseFloat(document.getElementById('min-score').value),
+        max_clips: parseInt(document.getElementById('max-clips').value),
+        block_min: parseInt(document.getElementById('block-min').value),
+        whisper_model: document.getElementById('whisper-model').value,
+        compute_mode: document.getElementById('compute-mode').value,
+        profile: document.getElementById('export-profile').value,
+        buffer_min: parseInt(document.getElementById('buffer-min').value),
+        twitch_channel: document.getElementById('twitch-channel').value.trim(),
+        cookies_browser: document.getElementById('cookies-browser').value,
+        cookies_file: document.getElementById('cookies-file').value.trim(),
+      });
+      if (res.ok) {
+        lastRunUrl = url;
+        if (res.active_run_dir) document.getElementById('output-folder').value = res.active_run_dir;
+        clearStageWorkspace();
+        showToast('Pipeline started');
+        await pollState();
+      }
+      else showToast(res.error || 'Failed to start');
+    }
+
+    async function resumeCurrentRun() {
+      const runDir = document.getElementById('output-folder').value.trim() || state.active_run_dir;
+      const res = await api('/api/history/resume', {
+        run_dir: runDir,
+        url: document.getElementById('stream-url').value.trim(),
+        cookies_browser: document.getElementById('cookies-browser').value,
+        cookies_file: document.getElementById('cookies-file').value.trim(),
+      });
+      if (res.ok) {
+        showToast('Resuming where left off...');
+        await pollState();
+      } else {
+        showToast(res.error || 'Could not resume');
+      }
+    }
+
+    async function stopClippingRun() {
+      await api('/api/stop', {});
+      showToast('Stopped — click Resume or Start Again');
+      await pollState();
+    }
+    async function loadRun(runDir) {
+      const res = await api('/api/history/load', { run_dir: runDir });
+      if (res.ok) { selectedClipIndex = null; document.getElementById('output-folder').value = runDir; await pollState(); switchCenterTab('clips'); showToast('Run loaded'); }
+      else showToast('No rendered clips in this run yet');
+    }
+    async function resumeRun(runDir) {
+      const res = await api('/api/history/resume', {
+        run_dir: runDir,
+        cookies_browser: document.getElementById('cookies-browser').value,
+        cookies_file: document.getElementById('cookies-file').value.trim(),
+      });
+      if (res.ok) {
+        selectedClipIndex = null;
+        lastClipsSignature = '';
+        playedCompletedClips.clear();
+        lastLogCount = 0;
+        document.getElementById('output-folder').value = runDir;
+        await pollState();
+        showToast('Resuming run...');
+      }
+      else showToast(res.error || 'Could not resume');
+    }
+    async function removeRun(runDir) {
+      const res = await api('/api/history/remove', { run_dir: runDir });
+      if (res.ok) { await pollState(); showToast('Run removed'); } else showToast(res.error || 'Error');
+    }
+    async function clearAllHistory() {
+      const res = await api('/api/history/clear', {});
+      if (res.ok) { selectedClipIndex = null; await pollState(); showToast('History cleared'); } else showToast(res.error || 'Error');
+    }
+    async function newRunFolder() {
+      lastRunUrl = '';
+      const res = await api('/api/reset', {});
+      if (res.ok && res.active_run_dir) {
+        document.getElementById('output-folder').value = res.active_run_dir;
+      } else {
+        const d = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        document.getElementById('output-folder').value = `runs/run_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+      }
+      document.getElementById('stream-url').value = '';
+      clearStageWorkspace();
+      await pollState();
+      switchSidebarTab('new');
+    }
+
+    function onProfileChange() {
+      const p2 = document.getElementById('export-profile').value === 'profile2';
+      if (p2) {
+        setPill('exp-916', true);
+        setPill('exp-11', false);
+        setPill('exp-169', false);
+      }
+      document.getElementById('exp-11').disabled = p2;
+      document.getElementById('exp-169').disabled = p2;
+      document.getElementById('exp-11').style.opacity = p2 ? '0.45' : '1';
+      document.getElementById('exp-169').style.opacity = p2 ? '0.45' : '1';
+    }
+    function onEditorProfileChange() {
+      if (document.getElementById('ed-profile').value === 'profile2') {
+        document.getElementById('ed-layout').value = 'facecam';
+        setPreviewRatio('9:16');
+      }
+      syncEditorPreview();
+    }
+    function onModeChange(updateScore = true) {
+      const isLive = document.getElementById('pipeline-mode').value === 'live';
+      document.getElementById('live-only-opts').classList.toggle('hidden', !isLive);
+      document.getElementById('mode-ready-badge').textContent = isLive ? 'Live Ready' : 'VOD Ready';
+      if (updateScore) document.getElementById('min-score').value = isLive ? '7.5' : '7.0';
+    }
+    function onPresetChange() {
+      const p = PRESETS[document.getElementById('llm-preset').value];
+      if (p) { document.getElementById('llm-base-url').value = p[0]; if (p[1]) document.getElementById('llm-model').value = p[1]; }
+    }
+    async function saveLlmSettings(closeAfter = false) {
+      await api('/api/settings', {
+        preset: document.getElementById('llm-preset').value,
+        base_url: document.getElementById('llm-base-url').value.trim(),
+        model: document.getElementById('llm-model').value.trim(),
+        api_key: document.getElementById('llm-api-key').value,
+      });
+      document.getElementById('llm-test-status').textContent = 'Saved!';
+      if (closeAfter) toggleSettingsModal();
+    }
+    async function refreshLlmModels() {
+      document.getElementById('llm-test-status').textContent = 'Fetching...';
+      const res = await api('/api/llm/models', { base_url: document.getElementById('llm-base-url').value.trim(), api_key: document.getElementById('llm-api-key').value });
+      if (res.ok) {
+        document.getElementById('llm-model-list').innerHTML = (res.models || []).map(m => `<option value="${escapeHtml(m)}">`).join('');
+        document.getElementById('llm-test-status').textContent = `Found ${(res.models || []).length} model(s)`;
+      } else document.getElementById('llm-test-status').textContent = 'Unreachable';
+    }
+    async function testLlm() {
+      document.getElementById('llm-test-status').textContent = 'Testing...';
+      const res = await api('/api/llm/test', {
+        preset: document.getElementById('llm-preset').value,
+        base_url: document.getElementById('llm-base-url').value.trim(),
+        model: document.getElementById('llm-model').value.trim(),
+        api_key: document.getElementById('llm-api-key').value,
+      });
+      document.getElementById('llm-test-status').textContent = res.ok ? `Connected (${res.reply})` : (res.error || 'Failed');
+    }
+
+    function openClipsFolder() { api('/api/open_folder', { run_dir: document.getElementById('output-folder').value }); }
+    function openExternalPlayer() {
+      const clip = (state.clips || []).find(c => c.index === selectedClipIndex);
+      const path = clip?.files?.[currentRatio];
+      if (path) api('/api/open_external', { path });
+    }
+    function switchSidebarTab(tab) {
+      document.getElementById('sidebar-panel-new').classList.toggle('hidden', tab !== 'new');
+      document.getElementById('sidebar-panel-history').classList.toggle('hidden', tab !== 'history');
+      document.getElementById('tab-btn-new').className = tab === 'new' ? 'py-1.5 px-3 rounded-md text-[12px] font-medium bg-[#181B24] text-white border border-white/[0.08]' : 'py-1.5 px-3 rounded-md text-[12px] font-medium text-zinc-400 hover:text-zinc-200';
+      document.getElementById('tab-btn-history').className = tab === 'history' ? 'py-1.5 px-3 rounded-md text-[12px] font-medium bg-[#181B24] text-white border border-white/[0.08] flex items-center justify-center gap-1.5' : 'py-1.5 px-3 rounded-md text-[12px] font-medium text-zinc-400 hover:text-zinc-200 flex items-center justify-center gap-1.5';
+    }
+    function switchCenterTab(tab) {
+      document.getElementById('clips-list-container').classList.toggle('hidden', tab !== 'clips');
+      document.getElementById('pipeline-log-container').classList.toggle('hidden', tab !== 'log');
+      document.getElementById('center-tab-clips').className = tab === 'clips' ? 'px-2.5 py-1 rounded-md text-[12px] font-medium bg-[#181B24] text-white border border-white/[0.08] flex items-center gap-1.5' : 'px-2.5 py-1 rounded-md text-[12px] font-medium text-zinc-400 hover:text-zinc-200 flex items-center gap-1.5';
+      document.getElementById('center-tab-log').className = tab === 'log' ? 'px-2.5 py-1 rounded-md text-[12px] font-medium bg-[#181B24] text-white border border-white/[0.08]' : 'px-2.5 py-1 rounded-md text-[12px] font-medium text-zinc-400 hover:text-zinc-200';
+    }
+    function toggleSortClips() { sortByScore = !sortByScore; document.getElementById('sort-label').textContent = sortByScore ? 'Score' : 'Rank'; renderClipsList(); }
+    function setPill(id, on) {
+      const btn = document.getElementById(id);
+      btn.setAttribute('data-active', on ? 'true' : 'false');
+      btn.className = on ? 'export-ratio-pill h-8 rounded-lg text-[12px] font-medium tabular-nums bg-indigo-500/15 text-indigo-300 border border-indigo-500/40 flex items-center justify-center gap-1.5' : 'export-ratio-pill h-8 rounded-lg text-[12px] font-medium tabular-nums bg-[#090A0F] text-zinc-500 border border-white/[0.08] flex items-center justify-center gap-1.5';
+      btn.querySelector('span').className = on ? 'w-1.5 h-1.5 rounded-full bg-indigo-400' : 'w-1.5 h-1.5 rounded-full bg-zinc-600';
+    }
+    function toggleExportRatio(btn) { setPill(btn.id, btn.getAttribute('data-active') !== 'true'); }
+    function setSwitch(id, on) {
+      const btn = document.getElementById(id);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+      btn.className = on ? 'w-9 h-5 rounded-full bg-indigo-500 p-0.5 transition-colors flex items-center justify-end' : 'w-9 h-5 rounded-full bg-zinc-800 p-0.5 transition-colors flex items-center justify-start border border-white/[0.08]';
+    }
+    function toggleSwitch(btn) { setSwitch(btn.id, btn.getAttribute('aria-checked') !== 'true'); }
+    function filterHistory() { renderHistoryList(); }
+    function toggleSettingsModal() { document.getElementById('settings-modal').classList.toggle('hidden'); }
+    function copyAllMetadata() {
+      const txt = `HOOK: ${document.getElementById('field-hook').value}\nTITLE: ${document.getElementById('field-title').value}\n\n${document.getElementById('field-caption').value}\n\n${document.getElementById('field-hashtags').value}`;
+      const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      showToast('Copied Hook, Title, Caption & Hashtags');
+    }
+    function showToast(msg) {
+      const c = document.getElementById('toast-container');
+      const d = document.createElement('div');
+      d.className = 'px-3.5 py-2.5 rounded-xl bg-[#181B24] border border-white/[0.12] text-zinc-100 text-[12px] font-medium shadow-xl';
+      d.textContent = msg; c.appendChild(d); setTimeout(() => d.remove(), 2600);
+    }
+    function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+    function escapeJs(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+
+    window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/shutdown'));
+    pollState();
+    setInterval(pollState, 800);
+  </script>
+</body>
+</html>

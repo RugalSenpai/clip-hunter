@@ -78,6 +78,9 @@ def _cmd_vod_render(args: argparse.Namespace) -> int:
             ratios=args.ratios,
             enable_subtitles=args.subtitles,
             whisper_model=args.whisper_model,
+            compute_mode=args.compute,
+            enable_hook=args.hook,
+            profile=args.profile,
         )
         if art is not None:
             artifacts.append(art)
@@ -108,6 +111,9 @@ def _cmd_vod_stream(args: argparse.Namespace) -> int:
         whisper_model=args.whisper_model,
         game_tag=args.game_tag,
         open_folder=args.open_folder,
+        compute_mode=args.compute,
+        enable_hook=args.hook,
+        profile=args.profile,
     )
     return 0
 
@@ -130,14 +136,30 @@ def _cmd_live(args: argparse.Namespace) -> int:
         twitch_channel=args.twitch_channel,
         streamer=args.streamer,
         game_tag=args.game_tag,
+        compute_mode=args.compute,
+        enable_hook=args.hook,
+        profile=args.profile,
     )
     return 0
 
 
 def _add_shared_render_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--ratios", type=_parse_ratios, default=list(VALID_RATIOS), help="Comma-separated ratios: 9:16,1:1,16:9")
-    parser.add_argument("--subtitles", action=argparse.BooleanOptionalAction, default=True, help="Burn in hook + word-by-word subtitles")
+    parser.add_argument("--subtitles", action=argparse.BooleanOptionalAction, default=True, help="Burn in word-by-word subtitles")
+    parser.add_argument("--hook", action=argparse.BooleanOptionalAction, default=True, help="Include top hook title banner in subtitles")
     parser.add_argument("--whisper-model", default="small.en", help="faster-whisper model name")
+    parser.add_argument(
+        "--compute",
+        choices=["auto", "cpu", "gpu", "hybrid"],
+        default="auto",
+        help="Compute mode: auto (GPU+fallback), cpu, gpu (NVENC+CUDA), or hybrid (GPU+CPU parallel)",
+    )
+    parser.add_argument(
+        "--profile",
+        choices=["profile1", "profile2"],
+        default="profile1",
+        help="Export profile: profile1 (multi-ratio 9:16/1:1/16:9) or profile2 (9:16 split: top facecam + center-cropped gameplay)",
+    )
     parser.add_argument("--open-folder", action="store_true", help="Open clips folder in Explorer when done")
 
 

@@ -82,6 +82,15 @@ def _chunk_words(words: list[WordTimestamp], chunk_size: int) -> list[list[WordT
     return chunks
 
 
+def _hex_to_ass_bgr(hex_color: str) -> str:
+    """Convert #RRGGBB hex string into ASS &H00BBGGRR& color code."""
+    h = hex_color.strip().lstrip("#")
+    if len(h) != 6:
+        return "&H0000FFFF&"
+    r, g, b = h[0:2], h[2:4], h[4:6]
+    return f"&H00{b.upper()}{g.upper()}{r.upper()}&"
+
+
 def generate_ass_subtitles(
     words: list[WordTimestamp],
     hook_text: str,
@@ -89,12 +98,24 @@ def generate_ass_subtitles(
     ratio: str,
     out_path: str | Path,
     hook_duration_sec: float = 4.5,
+    include_hook: bool = True,
+    hook_y_pct: float | None = None,
+    sub_y_pct: float | None = None,
+    highlight_color: str = "#FFFF00",
 ) -> Path:
     """Generate a ratio-aware .ass subtitle file with hook banner + word-by-word active highlight."""
     if ratio not in RATIO_STYLES:
         raise ValueError(f"Unsupported ratio: {ratio}")
     style = RATIO_STYLES[ratio]
     res_x, res_y = RATIO_DIMENSIONS[ratio]
+    hook_mv = int(max(10, min(res_y - 80, (hook_y_pct / 100.0) * res_y))) if hook_y_pct is not None else style.hook_margin_v
+    if sub_y_pct is not None:
+        word_align = 8  # Top-center so MarginV matches CSS top: %
+        word_mv = int(max(10, min(res_y - 90, (sub_y_pct / 100.0) * res_y)))
+    else:
+        word_align = 2
+        word_mv = style.word_margin_v
+    hl_ass = _hex_to_ass_bgr(highlight_color)
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -105,17 +126,17 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Hook,Arial Black,{style.hook_font_size},&H00FFFFFF,&H0000FFFF,&H00000000,&HB0000000,1,0,0,0,100,100,0,0,3,6,0,8,60,60,{style.hook_margin_v},1
-Style: Caption,Arial Black,{style.word_font_size},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,7,2,2,60,60,{style.word_margin_v},1
+Style: Hook,Arial Black,{style.hook_font_size},&H00FFFFFF,&H0000FFFF,&H00000000,&HB0000000,1,0,0,0,100,100,0,0,3,6,0,8,60,60,{hook_mv},1
+Style: Caption,Arial Black,{style.word_font_size},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,7,2,{word_align},60,60,{word_mv},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events: list[str] = []
 
-    # Top hook title banner (first ~4.5 seconds to grab viewers)
+    # Top hook title banner (optional, first ~4.5 seconds to grab viewers)
     clean_hook = _escape_ass(hook_text.strip().upper())
-    if clean_hook:
+    if include_hook and clean_hook:
         h_end = min(clip_duration, max(2.5, hook_duration_sec))
         events.append(f"Dialogue: 1,{_ass_time(0.0)},{_ass_time(h_end)},Hook,,0,0,0,,{clean_hook}")
 
@@ -134,7 +155,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for idx, w in enumerate(chunk):
                 escaped = _escape_ass(w.word.upper())
                 if idx == active_idx:
-                    parts.append(r"{\c&H0000FFFF&\fscx108\fscy108}" + escaped + r"{\c&H00FFFFFF&\fscx100\fscy100}")
+                    parts.append(r"{\c" + hl_ass + r"\fscx108\fscy108}" + escaped + r"{\c&H00FFFFFF&\fscx100\fscy100}")
                 else:
                     parts.append(escaped)
             line_text = " ".join(parts)

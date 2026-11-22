@@ -14,7 +14,7 @@ def test_filtergraph_for_all_ratios_and_layouts(tmp_path: Path):
     cam_box = FacecamBox(x=1400, y=50, w=480, h=270, frame_w=1920, frame_h=1080, layout="facecam", confidence=0.9)
     fg_916, pad = build_video_filtergraph("9:16", cam_box, ass_path=ass)
     assert pad == "[vout]"
-    assert "vstack=inputs=2" in fg_916
+    assert "overlay=0:0" in fg_916 and "1080:576" in fg_916 and "1080:1920" in fg_916
     assert "ass='" in fg_916
 
     # Subtitles disabled
