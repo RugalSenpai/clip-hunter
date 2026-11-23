@@ -411,3 +411,58 @@ def fetch_video_section(
             raise FileNotFoundError(f"Expected video section output at {target}")
         return matches[0], fetch_start
     return target, fetch_start
+
+
+def resolve_hls_stream_url(url: str) -> tuple[str, str | None]:
+    """Resolve muxed HLS URL or (video_hls_url, audio_hls_url) via yt-dlp for online scrubbing."""
+    for extra in (
+        ["--extractor-args", "youtube:player_client=web_safari,web", "-f", "95/94/96/best[protocol*=m3u8][vcodec!=none][acodec!=none]"],
+        ["-f", "bestvideo[height<=720][protocol*=m3u8]+bestaudio[protocol*=m3u8]/best[vcodec!=none][acodec!=none]"],
+    ):
+        try:
+            proc = _run_ytdlp([*extra, "-g", url], timeout_sec=60)
+            lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip().startswith("http")]
+            if len(lines) >= 2:
+                return lines[0], lines[1]
+            if len(lines) == 1:
+                return lines[0], None
+        except RuntimeError:
+            if is_stop_requested():
+                raise
+    raise RuntimeError("Could not resolve online HLS stream URL for this video.")
+
+
+def fetch_preview_context(
+    url: str,
+    start_sec: float,
+    end_sec: float,
+    out_path: str | Path,
+) -> tuple[Path, float]:
+    """Fast-fetch a wider 720p context window for the Extend Clip scrubber."""
+    target = Path(out_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fetch_start = max(0.0, start_sec)
+    fetch_end = max(fetch_start + 10.0, end_sec)
+    section = f"*{format_timestamp(fetch_start)}-{format_timestamp(fetch_end)}"
+    args = [
+        "--download-sections",
+        section,
+        "-S",
+        "res:720,vcodec:h264,ext:mp4:m4a",
+        "-f",
+        "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+        "--merge-output-format",
+        "mp4",
+        "--force-overwrites",
+        "-o",
+        str(target),
+    ]
+    for extra in ([], ["--extractor-args", "youtube:player_client=web_safari,web"]):
+        try:
+            _run_ytdlp([*args, *extra, url], timeout_sec=300)
+            if target.exists():
+                return target, fetch_start
+        except RuntimeError:
+            if is_stop_requested() or extra:
+                raise
+    raise FileNotFoundError(f"Could not fetch preview context at {target}")

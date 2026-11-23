@@ -1,4 +1,4 @@
-# Clip Hunter `v1.00`
+# Clip Hunter `v2.1.0`
 
 > **Motive:** Turning 9–24 hour gaming streams into ready-to-post vertical clips shouldn't require downloading 10–30 GB of video or burning CPU transcribing 24 hours of dead air. **Clip Hunter** scans *text*, not media — using an LLM solely to pick viral timestamps & metadata, then downloading and rendering **only** the winning 20–60 second windows across `9:16`, `1:1`, and `16:9` with optional burned-in word-by-word subtitles.
 
@@ -13,13 +13,17 @@
 
 ---
 
-## Features (`v1.00`)
+## Features (`v2.1.0`)
 
-- **Clipper Studio Desktop GUI (`PySide6`):** Dark-mode studio UI with LLM preset & connection tester, saved API settings, live 3-stage pipeline tracker, built-in multi-ratio video player, metadata copy, and graceful **Stop** (preserves all completed clips).
-- **Mode A — VOD (`vod stream` / `vod prepare` + `vod render`):** Supports both concurrent local/cloud LLM streaming and free zero-API-key session-LLM judging.
-- **Mode B — Live Streams (`live`):** Rolling 15-minute buffer of 1-minute `.ts` segments, per-minute local Whisper + audio loudness (+ optional Twitch IRC chat velocity), 5-minute overlapping windows, and immediate buffer cutting.
-- **Multi-Ratio Export:** Renders `9:16` (`1080×1920`), `1:1` (`1080×1080`), and `16:9` (`1920×1080`) with ratio-aware safe-zone captions, facecam split-screen or blur-fill fallback, `.txt` post metadata, and `summary.json`.
-- **Optional Subtitles Toggle:** Enable or disable burned-in hook titles and word-by-word highlighted captions (`--subtitles` / `--no-subtitles`).
+- **Web Studio UI (`web_server.py` + `web_ui.html`):** Browser-based dark studio with byte-range MP4 streaming, LLM preset & connection tester, saved settings, run History (Load / Resume / Remove / Clear), and automatic fresh run folder creation.
+- **Interactive Edit Clip Workspace:** Drag hook banner & subtitle Y-position, pick/resize facecam box, toggle facecam off for full-screen gameplay, pan gameplay horizontally, adjust trim sliders, edit transcript words or re-transcribe, and apply/re-render.
+- **Extend Clip from Full VOD (`hls.js` + `/api/hls_proxy`):** Open an online HLS stream jumped directly to the clip's VOD timestamp, scrub earlier/later across the full stream with audio, set new Start/End points, and re-download at 1080p+ + re-transcribe + re-render with live per-clip progress.
+- **Profile 1 & Profile 2 (`9:16` Split):** Profile 1 exports `9:16`, `1:1`, and `16:9`; Profile 2 overlays a 30% facecam at the top of 100% full-height horizontally panned gameplay (`1080×1920`).
+- **Smarter Facecam Detection (`OpenCV` YuNet + Edge Clustering):** Excludes middle-of-screen game/loading-screen character faces, prefers stationary left/right streamer cams, and distinguishes boxed (`16:9`/overlay) cams from transparent/chroma-keyed cams.
+- **1080p+ Video & Fast Audio Fetching:** Enforces `>=1080p` clip downloads with automatic client fallback (`web_safari,web`, `tv,web`), single-pass `yt-dlp -g` + `ffmpeg` 16kHz mono WAV extraction (~5s per 10-min chunk), and **YouTube Cookies** support (`Firefox`/`Chrome`/`Edge`/`Brave` or `cookies.txt`).
+- **Live Per-Task Progress & Stop / Resume:** Real-time `0–100%` progress bars per stage (`Downloading`, `Transcribing`, `Rendering`) as soon as the LLM picks a winner, auto-play on completion, prompt subprocess cancellation on **Stop**, and **Resume** / **Start Again** controls.
+- **GPU / Hybrid Acceleration & Multi-line Subtitles:** NVENC + CUDA acceleration with automatic CPU fallback and 2-line ASS word-highlight captions.
+- **Mode A (VOD) & Mode B (Live Streams):** Supports both VOD blocks (`10m` default) and rolling 15-minute live buffers with optional Twitch IRC chat velocity.
 
 ---
 

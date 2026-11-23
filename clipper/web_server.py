@@ -5,11 +5,13 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import threading
 import time
 import urllib.parse
+import urllib.request
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -422,8 +424,18 @@ class StudioState:
     def get_clip_edit_state(self, run_dir: Path, clip_index: int) -> dict[str, Any]:
         work_dir = run_dir / "work" / f"clip_{clip_index:02d}"
         edit_file = work_dir / "edit_state.json"
+        source_url = ""
+        state_file = run_dir / "state.json"
+        if state_file.exists():
+            try:
+                source_url = str(json.loads(state_file.read_text(encoding="utf-8")).get("url") or "")
+            except Exception:
+                pass
         if edit_file.exists():
-            return json.loads(edit_file.read_text(encoding="utf-8"))
+            data = json.loads(edit_file.read_text(encoding="utf-8"))
+            if source_url and not data.get("source_url"):
+                data["source_url"] = source_url
+            return data
 
         # Synthesize edit_state for legacy runs from summary.json + window.mp4
         win_mp4 = work_dir / "window.mp4"
@@ -438,6 +450,7 @@ class StudioState:
 
         dur = float(clip_info.get("duration_sec") or probe.get("duration") or 20.0)
         return {
+            "source_url": source_url,
             "window_video": str(win_mp4),
             "window_start": 0.0,
             "local_start": 4.0 if probe.get("duration", 0) > dur + 4.0 else 0.0,
@@ -462,6 +475,156 @@ class StudioState:
             "ratios": list((clip_info.get("files") or {"9:16": ""}).keys()),
             "words": [],
         }
+
+    def prepare_extend_preview(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from .fetcher import resolve_hls_stream_url, set_ytdlp_cookies
+
+        run_dir = Path(str(payload.get("run_dir") or self.active_run_dir))
+        clip_index = int(payload["index"])
+        base_state = self.get_clip_edit_state(run_dir, clip_index)
+        url = str(payload.get("url") or base_state.get("source_url") or "").strip()
+        if not url:
+            raise ValueError("Original VOD URL not found for this clip.")
+
+        clip_start = max(0.0, float(base_state.get("window_start", 0.0)) + float(base_state.get("local_start", 0.0)))
+        clip_end = clip_start + max(5.0, float(base_state.get("duration", 20.0)))
+
+        settings = self.load_settings()
+        set_ytdlp_cookies(
+            browser=str(settings.get("cookies_browser") or ""),
+            cookies_file=str(settings.get("cookies_file") or ""),
+        )
+
+        video_m3u8, audio_m3u8 = resolve_hls_stream_url(url)
+        out = {
+            "hls_url": f"/api/hls_proxy?url={urllib.parse.quote(video_m3u8, safe='')}",
+            "clip_start": round(clip_start, 3),
+            "clip_end": round(clip_end, 3),
+        }
+        if audio_m3u8:
+            out["audio_hls_url"] = f"/api/hls_proxy?url={urllib.parse.quote(audio_m3u8, safe='')}"
+        return out
+
+    def extend_clip(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from .fetcher import fetch_video_section, set_ytdlp_cookies
+
+        run_dir = Path(str(payload.get("run_dir") or self.active_run_dir))
+        clip_index = int(payload["index"])
+        start_sec = max(0.0, float(payload["start_sec"]))
+        end_sec = float(payload["end_sec"])
+        if end_sec <= start_sec + 2.0:
+            raise ValueError("End time must be at least 2 seconds after start time.")
+
+        base_state = self.get_clip_edit_state(run_dir, clip_index)
+        url = str(payload.get("url") or base_state.get("source_url") or "").strip()
+        if not url:
+            raise ValueError("Original VOD URL not found for this clip.")
+
+        settings = self.load_settings()
+        set_ytdlp_cookies(
+            browser=str(settings.get("cookies_browser") or ""),
+            cookies_file=str(settings.get("cookies_file") or ""),
+        )
+
+        work_dir = run_dir / "work" / f"clip_{clip_index:02d}"
+        work_dir.mkdir(parents=True, exist_ok=True)
+        win_mp4 = work_dir / "window.mp4"
+        temp_mp4 = work_dir / "window_extend.mp4"
+        temp_mp4.unlink(missing_ok=True)
+
+        with self.lock:
+            existing_card = next((dict(a) for a in self.artifacts if int(a.get("index", 0)) == clip_index), {})
+
+        def _emit_extend_progress(status: str, progress: int, status_text: str, task_step: int) -> None:
+            card = {
+                "index": clip_index,
+                "title": existing_card.get("title") or f"Clip #{clip_index:02d}",
+                "score": existing_card.get("score", 8.0),
+                "category": existing_card.get("category", "clip"),
+                "duration_sec": round(max(1.0, end_sec - start_sec), 2),
+                "hook": base_state.get("hook_text") or existing_card.get("hook", ""),
+                "caption": existing_card.get("caption", ""),
+                "hashtags": existing_card.get("hashtags", []),
+                "ratios": base_state.get("ratios", ["9:16"]),
+                "layout": base_state.get("layout", "auto"),
+                "files": {},
+                "status": status,
+                "progress": progress,
+                "status_text": status_text,
+                "task_step": task_step,
+                "task_total": 3,
+            }
+            with self.lock:
+                self.artifacts = [a for a in self.artifacts if int(a.get("index", 0)) != clip_index]
+                self.artifacts.append(card)
+                self.artifacts.sort(key=lambda a: int(a.get("index", 0)))
+
+        _emit_extend_progress("downloading", 0, "Downloading", 1)
+
+        def _do_extend() -> None:
+            try:
+                downloaded_path, window_start = fetch_video_section(
+                    url=url,
+                    start_sec=start_sec,
+                    end_sec=end_sec,
+                    out_path=temp_mp4,
+                    pad_before_sec=2.0,
+                    pad_after_sec=2.0,
+                    on_progress=lambda p: _emit_extend_progress("downloading", p, "Downloading", 1),
+                )
+                _emit_extend_progress("downloading", 100, "Downloading", 1)
+                downloaded_path.replace(win_mp4)
+                probe = probe_media(win_mp4)
+                win_dur = float(probe.get("duration") or max(1.0, end_sec - window_start))
+                local_start = max(0.0, start_sec - window_start)
+                duration = max(2.0, min(end_sec - start_sec, win_dur - local_start))
+
+                _emit_extend_progress("rendering", 0, "Transcribing", 2)
+                _segs, trans_words = transcribe_media(
+                    win_mp4,
+                    model_size=str(settings.get("whisper_model", "small.en")),
+                    device=str(settings.get("compute_mode", "auto")),
+                    time_offset=window_start,
+                    vad_filter=False,
+                    on_progress=lambda p: _emit_extend_progress("rendering", p, "Transcribing", 2),
+                )
+                _emit_extend_progress("rendering", 100, "Transcribing", 2)
+                rebased = rebase_words_for_clip(trans_words, start_sec, start_sec + duration)
+                words_list = [
+                    {"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3)}
+                    for w in rebased
+                ]
+
+                base_state["window_video"] = str(win_mp4)
+                base_state["window_start"] = round(window_start, 3)
+                base_state["local_start"] = round(local_start, 3)
+                base_state["duration"] = round(duration, 3)
+                base_state["window_duration"] = round(win_dur, 3)
+                base_state["words"] = words_list
+                (work_dir / "edit_state.json").write_text(
+                    json.dumps(base_state, indent=2, ensure_ascii=False), encoding="utf-8"
+                )
+
+                _emit_extend_progress("rendering", 25, "Rendering", 3)
+                self.rerender_clip(
+                    {
+                        "run_dir": str(run_dir),
+                        "index": clip_index,
+                        "local_start": local_start,
+                        "duration": duration,
+                        "words": words_list,
+                    }
+                )
+            except Exception as exc:
+                self._append_log(f"[extend ERROR] clip {clip_index:02d}: {exc}")
+                if existing_card:
+                    with self.lock:
+                        self.artifacts = [a for a in self.artifacts if int(a.get("index", 0)) != clip_index]
+                        self.artifacts.append(existing_card)
+                        self.artifacts.sort(key=lambda a: int(a.get("index", 0)))
+
+        threading.Thread(target=_do_extend, daemon=True).start()
+        return {"extending": True, "index": clip_index}
 
     def rerender_clip(self, payload: dict[str, Any]) -> dict[str, Any]:
         run_dir = Path(str(payload.get("run_dir") or self.active_run_dir))
@@ -710,6 +873,52 @@ def create_http_server(
                     self._send_json({"ok": False, "error": str(exc)}, 404)
                 return
 
+            if parsed.path == "/api/hls_proxy":
+                qs = urllib.parse.parse_qs(parsed.query)
+                target_url = (qs.get("url") or [""])[0]
+                if not target_url.startswith("http"):
+                    self.send_error(400)
+                    return
+                try:
+                    req = urllib.request.Request(
+                        target_url,
+                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                    )
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        ctype = resp.headers.get("Content-Type", "application/octet-stream")
+                        raw_bytes = resp.read()
+                    is_m3u8 = ("mpegurl" in ctype.lower()) or target_url.split("?", 1)[0].endswith(".m3u8") or raw_bytes.lstrip().startswith(b"#EXTM3U")
+                    if is_m3u8:
+                        text = raw_bytes.decode("utf-8", errors="replace")
+                        rewritten_lines = []
+                        for ln in text.splitlines():
+                            s_ln = ln.strip()
+                            if not s_ln:
+                                rewritten_lines.append(ln)
+                            elif s_ln.startswith("#"):
+                                def _rw_uri(m: re.Match[str]) -> str:
+                                    abs_u = urllib.parse.urljoin(target_url, m.group(1))
+                                    return f'URI="/api/hls_proxy?url={urllib.parse.quote(abs_u, safe="")}"'
+                                rewritten_lines.append(re.sub(r'URI="([^"]+)"', _rw_uri, ln))
+                            else:
+                                abs_u = urllib.parse.urljoin(target_url, s_ln)
+                                rewritten_lines.append(f'/api/hls_proxy?url={urllib.parse.quote(abs_u, safe="")}')
+                        out_bytes = "\n".join(rewritten_lines).encode("utf-8")
+                        ctype = "application/vnd.apple.mpegurl"
+                    else:
+                        out_bytes = raw_bytes
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Length", str(len(out_bytes)))
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(out_bytes)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
+                except Exception as exc:
+                    self.send_error(502, str(exc))
+                return
+
             if parsed.path == "/api/video":
                 qs = urllib.parse.parse_qs(parsed.query)
                 rel = (qs.get("path") or [""])[0]
@@ -854,6 +1063,12 @@ def create_http_server(
                 elif parsed.path == "/api/clip/rerender":
                     updated = studio.rerender_clip(body)
                     self._send_json({"ok": True, "clip": updated})
+                elif parsed.path == "/api/clip/extend":
+                    res_data = studio.extend_clip(body)
+                    self._send_json({"ok": True, **res_data})
+                elif parsed.path == "/api/clip/extend_preview":
+                    res_data = studio.prepare_extend_preview(body)
+                    self._send_json({"ok": True, **res_data})
                 elif parsed.path == "/api/clip/retranscribe":
                     run_dir = Path(str(body.get("run_dir") or studio.active_run_dir))
                     idx = int(body["index"])

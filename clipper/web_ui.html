@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CLIP HUNTER — AI Viral Clip Studio</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -314,6 +315,7 @@
             <button onclick="setStageMode('preview')" id="stage-mode-preview" class="px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#181B24] text-white">Preview</button>
             <button onclick="setStageMode('edit')" id="stage-mode-edit" class="px-2.5 py-1 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-200">✎ Edit Clip</button>
           </div>
+          <button onclick="openExtendModal()" id="btn-extend-clip" class="h-7 px-2.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/35 text-indigo-300 text-[11px] font-medium">↔ Extend Clip</button>
         </div>
         <div class="flex items-center gap-2">
           <span id="preview-clip-badge" class="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono text-zinc-400 bg-white/[0.04] border border-white/[0.06]">no clip selected</span>
@@ -523,6 +525,53 @@
       <div class="px-5 py-3 bg-[#0D0F15] border-t border-white/[0.08] flex justify-end gap-2">
         <button onclick="toggleSettingsModal()" class="h-8 px-3 rounded-lg text-[12px] text-zinc-400 hover:text-white">Close</button>
         <button onclick="saveLlmSettings(true)" class="h-8 px-4 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-[12px] font-medium">Save & Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXTEND CLIP MODAL (YouTube Live VOD Player) -->
+  <div id="extend-clip-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-3xl rounded-2xl bg-[#11131A] border border-white/[0.12] shadow-2xl overflow-hidden flex flex-col">
+      <div class="px-5 py-3 border-b border-white/[0.08] flex items-center justify-between">
+        <div>
+          <h3 class="text-[14px] font-semibold text-white">Extend Clip from Full VOD</h3>
+          <p class="text-[11px] text-zinc-400">Scrub earlier or later in the YouTube stream, then set your new Start and End times.</p>
+        </div>
+        <button onclick="closeExtendModal()" class="text-zinc-400 hover:text-white text-lg px-2">✕</button>
+      </div>
+      <div class="p-4 space-y-3">
+        <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-black border border-white/[0.08] flex items-center justify-center">
+          <video id="extend-local-video" controls class="w-full h-full object-contain" preload="auto" playsinline></video>
+          <audio id="extend-local-audio" class="hidden" preload="auto"></audio>
+          <div id="extend-loading-overlay" class="hidden absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-2 text-zinc-200 text-[12px]">
+            <span class="w-5 h-5 border-2 border-indigo-400/30 border-t-indigo-400 rounded-full animate-spin"></span>
+            <span id="extend-loading-text">Connecting to YouTube stream...</span>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button onclick="seekExtendBy(-30)" class="h-7 px-2.5 rounded bg-white/[0.06] hover:bg-white/[0.12] text-zinc-200 font-mono">-30s</button>
+            <button onclick="seekExtendBy(-10)" class="h-7 px-2.5 rounded bg-white/[0.06] hover:bg-white/[0.12] text-zinc-200 font-mono">-10s</button>
+            <button onclick="jumpToExtendAnchor()" class="h-7 px-2.5 rounded bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 font-medium">↺ LLM Clip Start</button>
+            <button onclick="seekExtendBy(10)" class="h-7 px-2.5 rounded bg-white/[0.06] hover:bg-white/[0.12] text-zinc-200 font-mono">+10s</button>
+            <button onclick="seekExtendBy(30)" class="h-7 px-2.5 rounded bg-white/[0.06] hover:bg-white/[0.12] text-zinc-200 font-mono">+30s</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="setExtendPoint('start')" class="h-7 px-3 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-semibold">[ Set Start Here</button>
+            <button onclick="setExtendPoint('end')" class="h-7 px-3 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold">Set End Here ]</button>
+          </div>
+        </div>
+        <div class="p-3 rounded-xl bg-[#090A0F] border border-white/[0.08] flex flex-wrap items-center justify-between gap-3 text-[12px]">
+          <div class="flex items-center gap-4 font-mono">
+            <div><span class="text-zinc-500">Start:</span> <span id="ext-start-lbl" class="text-emerald-400 font-semibold">00:00:00</span></div>
+            <div><span class="text-zinc-500">End:</span> <span id="ext-end-lbl" class="text-amber-400 font-semibold">00:00:00</span></div>
+            <div><span class="text-zinc-500">Duration:</span> <span id="ext-dur-lbl" class="text-indigo-300 font-semibold">0.0s</span></div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="closeExtendModal()" class="h-8 px-3 rounded-lg text-zinc-400 hover:text-white text-[12px]">Cancel</button>
+            <button id="btn-apply-extend" onclick="applyExtendRange()" class="h-8 px-4 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-[12px] font-medium">Apply Range & Re-render</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1425,6 +1474,164 @@
     function escapeJs(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 
     window.addEventListener('beforeunload', () => navigator.sendBeacon('/api/shutdown'));
+    let extendAnchorStart = 0;
+    let extendStartSec = 0;
+    let extendEndSec = 0;
+    let extendHls = null;
+    let extendAudioHls = null;
+    const extVideoEl = document.getElementById('extend-local-video');
+    const extAudioEl = document.getElementById('extend-local-audio');
+
+    extVideoEl.addEventListener('play', () => {
+      if (extAudioEl.getAttribute('src')) {
+        extAudioEl.currentTime = extVideoEl.currentTime;
+        extAudioEl.play().catch(() => {});
+      }
+    });
+    extVideoEl.addEventListener('pause', () => { extAudioEl.pause(); });
+    extVideoEl.addEventListener('seeking', () => {
+      if (extAudioEl.getAttribute('src')) extAudioEl.currentTime = extVideoEl.currentTime;
+    });
+    extVideoEl.addEventListener('timeupdate', () => {
+      if (extAudioEl.getAttribute('src') && Math.abs(extAudioEl.currentTime - extVideoEl.currentTime) > 0.3) {
+        extAudioEl.currentTime = extVideoEl.currentTime;
+      }
+    });
+
+    function formatHms(sec) {
+      const s = Math.max(0, Math.floor(sec));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const rem = s % 60;
+      const pad = n => String(n).padStart(2, '0');
+      return h > 0 ? `${h}:${pad(m)}:${pad(rem)}` : `${pad(m)}:${pad(rem)}`;
+    }
+
+    function updateExtendLabels() {
+      document.getElementById('ext-start-lbl').textContent = formatHms(extendStartSec);
+      document.getElementById('ext-end-lbl').textContent = formatHms(extendEndSec);
+      document.getElementById('ext-dur-lbl').textContent = `${Math.max(0, extendEndSec - extendStartSec).toFixed(1)}s`;
+    }
+
+    async function openExtendModal() {
+      if (selectedClipIndex === null) return showToast('Select a clip first');
+      videoEl.pause();
+      document.getElementById('extend-clip-modal').classList.remove('hidden');
+      const overlay = document.getElementById('extend-loading-overlay');
+      overlay.classList.remove('hidden');
+      try {
+        const res = await api('/api/clip/extend_preview', {
+          run_dir: document.getElementById('output-folder').value || state.active_run_dir,
+          index: selectedClipIndex,
+          url: document.getElementById('stream-url').value.trim(),
+        });
+        if (!res.ok || !res.hls_url) {
+          showToast(res.error || 'Could not resolve online stream');
+          closeExtendModal();
+          return;
+        }
+        extendStartSec = Number(res.clip_start || 0);
+        extendEndSec = Number(res.clip_end || extendStartSec + 20);
+        extendAnchorStart = extendStartSec;
+        updateExtendLabels();
+
+        const jumpTo = Math.max(0, extendStartSec - 10);
+        if (extendHls) { extendHls.destroy(); extendHls = null; }
+        if (extendAudioHls) { extendAudioHls.destroy(); extendAudioHls = null; }
+        extAudioEl.pause();
+        extAudioEl.removeAttribute('src');
+
+        if (window.Hls && Hls.isSupported()) {
+          extendHls = new Hls({ startPosition: jumpTo });
+          extendHls.loadSource(res.hls_url);
+          extendHls.attachMedia(extVideoEl);
+          if (res.audio_hls_url) {
+            extendAudioHls = new Hls({ startPosition: jumpTo });
+            extendAudioHls.loadSource(res.audio_hls_url);
+            extendAudioHls.attachMedia(extAudioEl);
+          }
+          extendHls.on(Hls.Events.MANIFEST_PARSED, () => {
+            extVideoEl.play().catch(() => {});
+          });
+        } else if (extVideoEl.canPlayType('application/vnd.apple.mpegurl')) {
+          extVideoEl.setAttribute('src', res.hls_url);
+          if (res.audio_hls_url) extAudioEl.setAttribute('src', res.audio_hls_url);
+          extVideoEl.addEventListener('loadedmetadata', () => {
+            extVideoEl.currentTime = jumpTo;
+            extVideoEl.play().catch(() => {});
+          }, { once: true });
+        } else {
+          showToast('HLS playback not supported in this browser');
+        }
+      } finally {
+        overlay.classList.add('hidden');
+      }
+    }
+
+    function closeExtendModal() {
+      document.getElementById('extend-clip-modal').classList.add('hidden');
+      if (extendHls) { extendHls.destroy(); extendHls = null; }
+      if (extendAudioHls) { extendAudioHls.destroy(); extendAudioHls = null; }
+      extVideoEl.pause();
+      extVideoEl.removeAttribute('src');
+      extVideoEl.load();
+      extAudioEl.pause();
+      extAudioEl.removeAttribute('src');
+      extAudioEl.load();
+    }
+
+    function seekExtendBy(delta) {
+      if (!extVideoEl.duration) return;
+      extVideoEl.currentTime = Math.max(0, Math.min(extVideoEl.duration, (extVideoEl.currentTime || 0) + delta));
+    }
+
+    function jumpToExtendAnchor() {
+      extVideoEl.currentTime = Math.max(0, extendAnchorStart - 5);
+    }
+
+    function setExtendPoint(which) {
+      const t = extVideoEl.currentTime || 0;
+      if (which === 'start') {
+        extendStartSec = t;
+        if (extendEndSec <= extendStartSec + 2) extendEndSec = extendStartSec + 15;
+      } else {
+        extendEndSec = t;
+        if (extendEndSec <= extendStartSec + 2) extendStartSec = Math.max(0, extendEndSec - 15);
+      }
+      updateExtendLabels();
+      showToast(which === 'start' ? `Start set to ${formatHms(extendStartSec)}` : `End set to ${formatHms(extendEndSec)}`);
+    }
+
+    async function applyExtendRange() {
+      if (selectedClipIndex === null) return;
+      if (extendEndSec <= extendStartSec + 2) return showToast('End time must be at least 2s after Start');
+      const targetIdx = selectedClipIndex;
+      const btn = document.getElementById('btn-apply-extend');
+      btn.disabled = true;
+      btn.textContent = 'Starting...';
+      try {
+        const res = await api('/api/clip/extend', {
+          run_dir: document.getElementById('output-folder').value || state.active_run_dir,
+          index: targetIdx,
+          start_sec: extendStartSec,
+          end_sec: extendEndSec,
+          url: document.getElementById('stream-url').value.trim(),
+        });
+        if (res.ok) {
+          playedCompletedClips.delete(targetIdx);
+          lastClipsSignature = '';
+          closeExtendModal();
+          showToast(`Extending Clip #${String(targetIdx).padStart(2, '0')}...`);
+          await pollState();
+        } else {
+          showToast(res.error || 'Extend failed');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Apply Range & Re-render';
+      }
+    }
+
     pollState();
     setInterval(pollState, 800);
   </script>
